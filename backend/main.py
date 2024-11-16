@@ -1,8 +1,9 @@
 import json
 import os
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from loguru import logger
 
 from backend.extractor import Database, Extractor
@@ -23,13 +24,17 @@ app.add_middleware(
 @app.post("/api/upload")
 async def upload_spreadsheet(file: UploadFile = File(...)):
     # Save the uploaded file
+    db = Database(uri="bolt://localhost:7689", user="neo4j", password="12345678")
     upload_dir = "uploads"
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
     file_path = os.path.join(upload_dir, file.filename)
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
-    return {"message": "File uploaded successfully", "file_name": file.filename}
+
+    extractor = Extractor(path=file_path, db=db, primary_key="ID")
+    nodes = extractor.get_node_names_from_sheet_and_db()
+    return nodes
 
 
 @app.post("/api/chat")
@@ -41,6 +46,41 @@ async def chat(message: str):
 @app.get("/api/test")
 async def test():
     return {"message": "This is a test message from the backend!"}
+
+
+@app.post("/api/ask")
+async def ask(request: Request):
+    data = await request.json()
+    question = data.get("question")
+    export = data.get("export", False)
+
+    if export:
+        # Generate or locate the spreadsheet file to return
+        file_path = "path_to_your_spreadsheet.xlsx"
+
+        # For testing purposes, you can create a simple spreadsheet
+        # or use an existing one. Here's how to create a simple one:
+
+        import pandas as pd
+
+        # Create a simple DataFrame
+        df = pd.DataFrame(
+            {"Question": [question], "Answer": [f'Answer to "{question}"']}
+        )
+
+        # Save it to an Excel file
+        file_path = "exported_data.xlsx"
+        df.to_excel(file_path, index=False)
+
+        # Return the file as a response
+        return FileResponse(
+            path=file_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename="data.xlsx",
+        )
+    else:
+        # Return the question back as the answer
+        return {"answer": question}
 
 
 @app.post("/api/process_file")

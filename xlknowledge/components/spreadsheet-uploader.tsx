@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select" // Assuming you have a Select component for dropdowns
 
 interface Relationship {
   source: string
@@ -21,9 +22,33 @@ export default function SpreadsheetUploader() {
   const [primaryKey, setPrimaryKey] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [relationships, setRelationships] = useState<Relationship[]>([])
+  const [dropdownOptions, setDropdownOptions] = useState<string[]>([])
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    setFile(acceptedFiles[0])
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const droppedFile = acceptedFiles[0]
+    setFile(droppedFile)
+
+    const formData = new FormData()
+    formData.append('file', droppedFile)
+
+    try {
+      const response = await fetch('http://localhost:8000/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Upload failed')
+      }
+
+      const data = await response.json()
+      setDropdownOptions(data) // Assuming the response is a list of strings
+      alert('Spreadsheet uploaded successfully!')
+    } catch (error: any) {
+      console.error('Error uploading spreadsheet:', error)
+      alert(`Failed to upload spreadsheet: ${error.message}`)
+    }
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -86,7 +111,7 @@ export default function SpreadsheetUploader() {
   }
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <Card className="w-full max-w-4xl mx-auto p-8">
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-center">Upload Spreadsheet</CardTitle>
       </CardHeader>
@@ -106,8 +131,7 @@ export default function SpreadsheetUploader() {
             ) : (
               <div>
                 <Upload className="w-8 h-8 mx-auto text-gray-400" />
-                <p className="mt-2">Drag &amp; drop a spreadsheet here, or click to select one</p>
-                <p className="text-sm text-gray-500">(Supports .xlsx, .xls, and .csv files)</p>
+                <p className="mt-2">Drag &amp; drop a spreadsheet (.xlsx) here, or click to select one</p>
               </div>
             )}
           </div>
@@ -119,56 +143,49 @@ export default function SpreadsheetUploader() {
               id="primaryKey"
               value={primaryKey}
               onChange={(e) => setPrimaryKey(e.target.value)}
-              placeholder="Enter the primary key"
+              placeholder="Column name which exists in all sheets of the spreadsheet"
             />
           </div>
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Relationships</h3>
-              <Button type="button" onClick={addRelationship} variant="outline">
-                Add new Relation
-              </Button>
             </div>
             {relationships.map((rel, index) => (
               <div key={index} className="flex items-center space-x-2 bg-muted p-4 rounded-md">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Input
-                        value={rel.source}
-                        onChange={(e) => updateRelationship(index, 'source', e.target.value)}
-                        placeholder="Source"
-                        className="w-1/3"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Must match a sheet name in the Excel file</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Select
+                  onValueChange={(value) => updateRelationship(index, 'source', value)}
+                  value={rel.source}
+                >
+                  <SelectTrigger className="w-1/3">
+                    <span>{rel.source || 'Select Source'}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dropdownOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <ArrowRight className="w-6 h-6 text-muted-foreground flex-shrink-0" />
                 <Input
                   value={rel.name}
                   onChange={(e) => updateRelationship(index, 'name', e.target.value)}
-                  placeholder="Relation Name"
+                  placeholder="relation_name"
                   className="w-1/3"
                 />
                 <ArrowRight className="w-6 h-6 text-muted-foreground flex-shrink-0" />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Input
-                        value={rel.target}
-                        onChange={(e) => updateRelationship(index, 'target', e.target.value)}
-                        placeholder="Target"
-                        className="w-1/3"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Must match a sheet name in the Excel file</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Select
+                  onValueChange={(value) => updateRelationship(index, 'target', value)}
+                  value={rel.target}
+                >
+                  <SelectTrigger className="w-1/3">
+                    <span>{rel.target || 'Select Target'}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dropdownOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   type="button"
                   variant="ghost"
@@ -181,6 +198,11 @@ export default function SpreadsheetUploader() {
                 </Button>
               </div>
             ))}
+            <div className="flex justify-center mt-4">
+              <Button type="button" onClick={addRelationship} variant="outline">
+                Add new Relation
+              </Button>
+            </div>
           </div>
         </CardContent>
         <CardFooter>

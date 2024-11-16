@@ -1,5 +1,5 @@
-import { SpreadsheetUploaderComponent } from "@/components/spreadsheet-uploader"
+import SpreadsheetUploader from '@/components/spreadsheet-uploader';
 
 export default function Page() {
-  return <SpreadsheetUploaderComponent />
+  return <SpreadsheetUploader />
 }

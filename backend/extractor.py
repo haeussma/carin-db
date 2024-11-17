@@ -1,9 +1,9 @@
+import logging
 import uuid
 from typing import List
 
 import pandas as pd
 from loguru import logger
-from pydantic import BaseModel
 
 from backend.cypher import CypherQueryGenerator
 from backend.data_sanity import DataSanityChecker
@@ -12,16 +12,13 @@ from backend.exceptions import PrimaryKeyError
 from backend.models import Node, Relationship
 
 
-class Extractor(BaseModel):
-    path: str
-    db: Database
-    primary_key: str
-    sheet_names: List[str] = []
-    batch_id: str
-
-    def __init__(self, **data):
-        data["batch_id"] = str(uuid.uuid4())
-        super().__init__(**data)
+class Extractor:
+    def __init__(self, path: str, db: Database, primary_key: str):
+        self.path = path
+        self.db = db
+        self.primary_key = primary_key
+        self.sheet_names: List[str] = []
+        self.batch_id = str(uuid.uuid4())
         self.sheet_names = self.read_sheet_names()
 
     def read_sheet_names(self) -> List[str]:
@@ -48,6 +45,10 @@ class Extractor(BaseModel):
             primary_key=self.primary_key,
         )
         logger.debug("Sanity checking data types")
+
+        # replace all " " with "_" in column names
+        df.columns = df.columns.str.replace(" ", "_")
+
         for column in df.columns:
             data_checker.check_data_types(column)
 
@@ -81,16 +82,23 @@ class Extractor(BaseModel):
                 session.run(cypher_query)
 
     def unify_nodes(self):
+        logger.info("Unifying nodes")
         with self.db.driver.session() as session:
             for sheet_name in self.sheet_names:
+                logging.debug(f"Unifying nodes for sheet: {sheet_name}")
                 df = self.read_sheet(sheet_name)
                 attribute_columns = df.columns.tolist()
+                attribute_columns = [
+                    column.replace(" ", "_") for column in attribute_columns
+                ]
+                print(attribute_columns)
                 cypher_query = CypherQueryGenerator.generate_unify_nodes_query(
                     node_label=sheet_name,
                     primary_key=self.primary_key,
                     path=self.path,
                     attribute_columns=attribute_columns,
                 )
+                logging.debug(f"Unify nodes query: {cypher_query}")
                 session.run(cypher_query)
 
     def get_existing_node_labels(self) -> list[str]:
@@ -106,28 +114,3 @@ class Extractor(BaseModel):
         extracts all existing nodes from the database."""
         nodes = set(self.get_existing_node_labels() + self.sheet_names)
         return list(nodes)
-
-
-if __name__ == "__main__":
-    db = Database(uri="bolt://localhost:7689", user="neo4j", password="12345678")
-
-    relations = [
-        Relationship(name="EXPRESSED_AS", source="Enzyme", target="Biocatalyst"),
-        Relationship(
-            name="HAS_PHOTOMETRIC_MEASUREMENT", source="Biocatalyst", target="UVvis"
-        ),
-        Relationship(name="HAS_HPLC_MEASUREMENT", source="Biocatalyst", target="Peak"),
-        Relationship(name="ASSAYED", source="Peak", target="Reaction"),
-        Relationship(name="ASSAYED", source="UVvis", target="Reaction"),
-    ]
-
-    path = "/Users/max/Documents/GitHub/carin-db/data.xlsx"
-    ex = Extractor(
-        path=path,
-        db=db,
-        primary_key="position",
-    )
-
-    ex.extract_file()
-    ex.create_relationships(relations)
-    ex.unify_nodes()

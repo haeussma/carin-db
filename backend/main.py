@@ -1,13 +1,32 @@
 import json
+import math
 import os
+from io import BytesIO
 
+import pandas as pd
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
+from backend.chat import Chat
 from backend.extractor import Database, Extractor
 from backend.models import Relationship
+
+
+def sanitize_data(data):
+    if isinstance(data, list):
+        return [sanitize_data(item) for item in data]
+    elif isinstance(data, dict):
+        return {key: sanitize_data(value) for key, value in data.items()}
+    elif isinstance(data, float):
+        if math.isnan(data) or math.isinf(data):
+            return None  # Replace NaN and Infinity with None
+        else:
+            return data
+    else:
+        return data
+
 
 app = FastAPI()
 
@@ -38,8 +57,7 @@ async def upload_spreadsheet(file: UploadFile = File(...)):
 
 
 @app.post("/api/chat")
-async def chat(message: str):
-    # Implement your chat logic here
+async def chat(message: str, to_file: bool):
     return {"response": "AI response goes here"}
 
 
@@ -50,37 +68,51 @@ async def test():
 
 @app.post("/api/ask")
 async def ask(request: Request):
-    data = await request.json()
-    question = data.get("question")
-    export = data.get("export", False)
+    front_payload = await request.json()
+    question = front_payload.get("question")
+    logger.debug(f"Received question: {question}")
 
-    if export:
-        # Generate or locate the spreadsheet file to return
-        file_path = "path_to_your_spreadsheet.xlsx"
+    db = Database(uri="bolt://localhost:7689", user="neo4j", password="12345678")
 
-        # For testing purposes, you can create a simple spreadsheet
-        # or use an existing one. Here's how to create a simple one:
+    chat = Chat()
+    data = chat.get_data_from_db(question, db)
+    logger.debug(f"Data before flattening: {data}")
 
-        import pandas as pd
+    # Flatten the data by extracting the first (and only) value from each item
+    # data = [next(iter(item.values())) for item in data]
+    logger.debug(f"Data after flattening: {data}")
 
-        # Create a simple DataFrame
-        df = pd.DataFrame(
-            {"Question": [question], "Answer": [f'Answer to "{question}"']}
-        )
+    data = sanitize_data(data)
+    logger.debug(f"Sanitized data: {data}")
 
-        # Save it to an Excel file
-        file_path = "exported_data.xlsx"
-        df.to_excel(file_path, index=False)
+    return {"result": data}
 
-        # Return the file as a response
-        return FileResponse(
-            path=file_path,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename="data.xlsx",
-        )
-    else:
-        # Return the question back as the answer
-        return {"answer": question}
+
+@app.post("/api/generateSpreadsheet")
+async def generate_spreadsheet(request: Request):
+    front_payload = await request.json()
+    data = front_payload.get("data")
+    if not data:
+        return {"error": "No data provided"}
+
+    # Convert data to pandas DataFrame
+    df = pd.DataFrame(data)
+
+    # Create an Excel file in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False)
+        # No need to call writer.save() here
+
+    output.seek(0)  # Rewind the buffer
+
+    # Prepare response
+    headers = {"Content-Disposition": 'attachment; filename="data.xlsx"'}
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @app.post("/api/process_file")

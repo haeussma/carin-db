@@ -87,3 +87,7 @@ class DataSanityChecker:
             raise PrimaryKeyNotUniqueError(
                 self.primary_key, self.sheet_name, duplicate_rows, self.path
             )
+
+    def eliminate_space_in_column_names(self):
+        """Replace all spaces in column names with underscores"""
+        self.df.columns = self.df.columns.str.replace(" ", "_")

@@ -64,6 +64,7 @@ class Chat:
             },
             {"role": "user", "content": question},
         ]
+        logger.debug(f"Sending messages to OpenAI: {messages}")
 
         if history:
             logger.debug(f"Adding history to message: {history}")

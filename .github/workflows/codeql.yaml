@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: "0 0 * * 0"
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
     name: Analyze
@@ -15,9 +19,11 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
+      
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v2
       with:
         languages: python, javascript # Add relevant languages here
+        
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v2

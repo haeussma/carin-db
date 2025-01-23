@@ -3,13 +3,12 @@ import uuid
 from typing import List
 
 import pandas as pd
+from cypher import CypherQueryGenerator
+from data_sanity import DataSanityChecker
+from db.db_connect import Database
+from exceptions import PrimaryKeyError
 from loguru import logger
-
-from backend.cypher import CypherQueryGenerator
-from backend.data_sanity import DataSanityChecker
-from backend.db_connect import Database
-from backend.exceptions import PrimaryKeyError
-from backend.models import Node, Relationship
+from models import Node, Relationship
 
 
 class Extractor:
@@ -20,6 +19,12 @@ class Extractor:
         self.sheet_names: List[str] = []
         self.batch_id = str(uuid.uuid4())
         self.sheet_names = self.read_sheet_names()
+
+    @staticmethod
+    def sanitize_label(label: str) -> str:
+        """Sanitize a string to be used as a Neo4j node label.
+        Replaces spaces with underscores and removes any invalid characters."""
+        return label.replace(" ", "_").replace("-", "_")
 
     def read_sheet_names(self) -> List[str]:
         return pd.ExcelFile(self.path).sheet_names
@@ -59,7 +64,8 @@ class Extractor:
         with self.db.driver.session() as session:
             for _, row in df.iterrows():
                 data = row.to_dict()
-                node = Node(name=sheet_name, properties=data)
+                sanitized_name = self.sanitize_label(sheet_name)
+                node = Node(name=sanitized_name, properties=data)
                 cypher_query = CypherQueryGenerator.generate_cypher_query(
                     df=df,
                     node_label=node.name,
@@ -76,6 +82,9 @@ class Extractor:
     def create_relationships(self, relationships: List[Relationship]):
         with self.db.driver.session() as session:
             for relationship in relationships:
+                # Sanitize source and target labels
+                relationship.source = self.sanitize_label(relationship.source)
+                relationship.target = self.sanitize_label(relationship.target)
                 cypher_query = CypherQueryGenerator.generate_relationship_query(
                     relationship, self.primary_key, self.path
                 )
@@ -91,9 +100,9 @@ class Extractor:
                 attribute_columns = [
                     column.replace(" ", "_") for column in attribute_columns
                 ]
-                print(attribute_columns)
+                sanitized_name = self.sanitize_label(sheet_name)
                 cypher_query = CypherQueryGenerator.generate_unify_nodes_query(
-                    node_label=sheet_name,
+                    node_label=sanitized_name,
                     primary_key=self.primary_key,
                     path=self.path,
                     attribute_columns=attribute_columns,

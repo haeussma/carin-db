@@ -4,3 +4,5 @@ uvicorn
 pydantic
 neo4j
 pandas
+python-multipart
+openpyxl

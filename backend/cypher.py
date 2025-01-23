@@ -1,8 +1,7 @@
 from typing import List
 
 import pandas as pd
-
-from backend.models import Relationship
+from models import Relationship
 
 
 class CypherQueryGenerator:

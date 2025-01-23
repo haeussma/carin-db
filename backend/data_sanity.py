@@ -1,8 +1,7 @@
 from typing import List
 
 import pandas as pd
-
-from backend.exceptions import (
+from exceptions import (
     InconsistentDataError,
     PrimaryKeyNotFoundInRowError,
     PrimaryKeyNotUniqueError,

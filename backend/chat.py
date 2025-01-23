@@ -2,12 +2,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import instructor
+from db.db_connect import Database
 from loguru import logger
 from neo4j.exceptions import CypherSyntaxError
 from openai import OpenAI
 from pydantic import BaseModel, Field
-
-from backend.db_connect import Database
 
 
 class CypherResponse(BaseModel):
@@ -117,11 +116,10 @@ class Chat:
 
 if __name__ == "__main__":
     # define db
+    from db.db_connect import Database
     from devtools import pprint
 
-    from backend.db_connect import Database
-
-    db = Database(uri="bolt://localhost:7689", user="neo4j", password="12345678")
+    db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
 
     q = "Gimme the enzyme ids, position, induction concentration and peak area from the 3 enzymes with the highest peak area."
     chat = Chat()

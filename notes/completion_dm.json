@@ -1,0 +1,102 @@
+ChatCompletion(
+    id='chatcmpl-AukI6ahrAJQqXEfMOkgKDn2fsAUcn',
+    choices=[
+        Choice(
+            finish_reason='tool_calls',
+            index=0,
+            logprobs=None,
+            message=ChatCompletionMessage(
+                content=None,
+                refusal=None,
+                role='assistant',
+                audio=None,
+                function_call=None,
+                tool_calls=[
+                    ChatCompletionMessageToolCall(
+                        id='call_8NAQMYankfHAyvfkFpTCmaWz',
+                        function=Function(
+                            arguments=(
+                                '\n'
+                                '            {\n'
+                                '                "data_model_text": "The data model is as follows:\\n\\n# Components\\n\\n'
+                                '__Each additive__ of a reaction must be defined like substrate, cosubstrate, coenzyme'
+                                ', salts, ions, etc. The [biocatalyst
+            ](https: //github.com/StephanM87/Strenda-biocataly'
+                                'sis/blob/main/ModelExamples/Biocatalyst/Readme.md) and comprehensive description of t'
+                                'he [various states or conditions
+            ](https: //github.com/StephanM87/Strenda-biocatalysis/'
+                                'tree/main/ModelExamples/Reaction_conditions) during the reaction are not included amo'
+                                'ng the listed reaction components.\\n\\n<img src=\\"https://github.com/user-attachments/'
+                                'assets/a290033a-03f0-412b-b905-ea8c472c523a\\" width=\\"600\\">\\n\\n\\n### Components\\n\\nE'
+                                'ach component present in the planned reaction must be defined.\\n\\n- __name__\\n  - Typ'
+                                'e: string\\n  - Description: The name of the component can be either the trivial or tr'
+                                'ade name, the systematic designation according to IUPAC nomenclature, or any other me'
+                                'ans of identifying the substance.\\n\\n- __smiles__\\n  - Type: string\\n  - Description:'
+                                ' SMILES (Simplified Molecular Input Line Entry System) is a chemical notation used to'
+                                ' represent and describe molecular structures in a simplified and human-readable forma'
+                                't.\\n\\n- __persistent_identifier_PID__\\n  - Type: string\\n  - Description: One or more'
+                                ' identifiers that refer to the compound, such as CAS number, PubChem code, InChI code'
+                                ', etc.\\n\\n- __concentration__\\n  - Type: float\\n  - Minimum: 0.0\\n  - Description: Co'
+                                'ncentration of the component.\\n\\n- __concentration_unit__\\n  - Type: string\\n  - Desc'
+                                'ription: The concentration of the component is typically expressed in M (Molar), mmol'
+                                '/L (millimoles per liter), or µmol/L (micromoles per liter).\\n\\n- __supplier__\\n  - T'
+                                'ype: string\\n  - Description: Information about the source of the compound, usually a'
+                                ' commercial supplier with perhaps product code, but could be preparation in a researc'
+                                'h lab. Should the component have been synthesized internally,      please include a l'
+                                'iterature reference detailing its synthesis.\\n\\n- __purity__\\n  - Type: float\\n  - De'
+                                'scription: Purity of a substance typically expressed in percentage (%). It is commonl'
+                                'y defined as the percentage of the pure or desired compound relative to the total mas'
+                                's or volume of the substance.\\n\\n- __formulation__\\n  - Type: string\\n  - Description'
+                                ': The formulation encompass the nature of the component, whether it is in powder, liq'
+                                'uid, gaseous form, or any other form, as well as the specific conditions under which '
+                                'it is presented.\\n\\n- __solubility_limit__\\n  - Type: float\\n  - Minimum: 0.0\\n  - De'
+                                'scription: This limit represents the maximum concentration of a component, which migh'
+                                't include gases, that can dissolve in a solution or gas phase. (__if_applicable__)\\n\\'
+                                'n- __solubility_limit_unit__\\n  - Type: string\\n  - Description: The solubility limit'
+                                ' of a component can be expressed in various units, including M (moles per liter), g/L'
+                                ' (grams per liter), % (percentage concentration), or particles per volume, depending '
+                                'on the         type of component and the solvent used. (__if_applicable__)\\n\\n<hr>\\n\\'
+                                'n## Storage conditions\\n\\nDescribing the components in the reaction mixture involve s'
+                                'pecifying their storage conditions before use in the reaction.\\n\\n### StorageConditio'
+                                'ns\\n\\n- __temperature__\\n  - Type: float\\n  - Description: Temperature at which the c'
+                                'omponent is stored.\\n\\n- __temperature_unit__\\n  - Type: string\\n  - Description: The'
+                                ' temperature can be specified in units such as K, °C, or °F.\\n\\n- __storage_start__\\n'
+                                '  - Type: date\\n  - Description: The date since the component has been stored.\\n\\n- _'
+                                '_additives__\\n  - Type: string\\n  - Description: Additives for the storage of compone'
+                                'nts can include antioxidants, stabilizers, drying agent, or even inert gases (argon, '
+                                'nitrogen), among others.\\n\\n<hr>\\n\\n- __special_treatment__\\n  - Type: string\\n  - De'
+                                'scription: If there are any other specific characteristics or aspects related to a co'
+                                'mponent that are important for reproducibility and are not described by the aforement'
+                                'ioned metadata, they should be explained       here.\\n\\n <hr>\\n\\n</div>"\n'
+                                '
+        }'
+                            ),
+                            name='parse_data_model',
+                        ),
+                        type='function',
+                    ),
+    ],
+            ),
+        ),
+],
+    created=1738087674,
+    model='gpt-4-0613',
+    object='chat.completion',
+    service_tier='default',
+    system_fingerprint=None,
+    usage=CompletionUsage(
+        completion_tokens=998,
+        prompt_tokens=1011,
+        total_tokens=2009,
+        completion_tokens_details=CompletionTokensDetails(
+            accepted_prediction_tokens=None,
+            audio_tokens=0,
+            reasoning_tokens=0,
+            rejected_prediction_tokens=None,
+        ),
+        prompt_tokens_details=PromptTokensDetails(
+            audio_tokens=0,
+            cached_tokens=0,
+        ),
+    ),
+)

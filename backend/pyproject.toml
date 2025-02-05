@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = "Backend for AI-assistend data management"
+authors = ["haeussma <83341109+haeussma@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+httpx = "^0.28.1"
+pandas = "^2.2.3"
+openpyxl = "^3.1.5"
+python-multipart = "^0.0.20"
+uvicorn = "^0.34.0"
+loguru = "^0.7.3"
+fastapi = "^0.115.7"
+neo4j = "^5.27.0"
+instructor = "^1.7.2"
+
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.14.1"
+ruff = "^0.9.3"
+pandas-stubs = "^2.2.3.241126"
+types-python-dateutil = "^2.9.0.20241206"
+types-requests = "^2.32.0.20241016"
+pytest = "^8.3.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+ignore_missing_imports = true

@@ -2,16 +2,21 @@ import json
 import math
 import os
 import sys
+from contextlib import asynccontextmanager
 from io import BytesIO
 
 import pandas as pd
-from chat import Chat
-from extractor import Database, Extractor
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
-from models import Relationship
+
+from .chat import Chat
+from .exceptions import TypeInconsistencyError
+from .extractor import Extractor
+from .fetch_external_api import fetch_uniprot_protein_fasta
+from .models.graph_model import GraphModel
+from .services.db_service import Database
 
 # Configure logger
 logger.remove()  # Remove default handler
@@ -44,7 +49,17 @@ def sanitize_data(data):
         return data
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting up FastAPI application")
+    # Create uploads directory if it doesn't exist
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
+        logger.info("Created uploads directory")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware
 app.add_middleware(
@@ -56,44 +71,35 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting up FastAPI application")
-    # Create uploads directory if it doesn't exist
-    if not os.path.exists("uploads"):
-        os.makedirs("uploads")
-        logger.info("Created uploads directory")
-
-
 @app.post("/api/upload")
 async def upload_spreadsheet(file: UploadFile = File(...)):
+    """Uploads the spreadsheet and returns the sheet model after validating data types and data consistency"""
+
     logger.info(f"Processing upload request for file: {file.filename}")
     try:
         # Save the uploaded file
-        db = Database(uri=DB_URI, user=DB_USER, password=DB_PASSWORD)
-        logger.debug(f"Connected to database at {DB_URI}")
-
         upload_dir = "uploads"
-        file_path = os.path.join(upload_dir, file.filename)
+        file_path = os.path.join(upload_dir, str(file.filename))
         logger.debug(f"Saving file to {file_path}")
 
         with open(file_path, "wb") as buffer:
             buffer.write(await file.read())
         logger.debug("File saved successfully")
 
-        extractor = Extractor(path=file_path, db=db, primary_key="ID")
-        nodes = extractor.get_node_names_from_sheet_and_db()
-        logger.info(f"Successfully processed file. Found nodes: {nodes}")
-        return nodes
+        extractor = Extractor(path=file_path)
+        try:
+            model = extractor.get_sheet_model()
+            return {
+                "status": "success",
+                "data": model.model_dump(
+                    mode="json"
+                ),  # Use model_dump instead of model_dump_json
+            }
+        except TypeInconsistencyError as e:
+            return JSONResponse(status_code=400, content=e.to_dict())
     except Exception as e:
-        logger.error(f"Error processing upload: {str(e)}")
+        logger.error(f"Error processing upload request: {str(e)}")
         raise
-
-
-@app.post("/api/chat")
-async def chat(message: str, to_file: bool):
-    logger.info(f"Received chat request: {message[:50]}...")
-    return {"response": "AI response goes here"}
 
 
 @app.get("/api/test")
@@ -167,43 +173,70 @@ async def generate_spreadsheet(request: Request):
 
 @app.post("/api/process_file")
 async def process_file(
-    primary_key: str = Form(...),
     file: UploadFile = File(...),
-    relationships: str = Form(None),
+    data: str = Form(...),
 ):
-    logger.info(f"Processing file: {file.filename}")
-    logger.debug(f"Primary key: {primary_key}")
-    logger.debug(f"Relationships: {relationships}")
-
+    """Process the uploaded file with the provided graph model configuration."""
+    logger.info(f"Processing file {file.filename} with graph model data")
     try:
         # Save the uploaded file
         upload_dir = "uploads"
-        file_path = os.path.join(upload_dir, file.filename)
-        logger.debug(f"Saving file to {file_path}")
+        file_path = os.path.join(upload_dir, str(file.filename))
 
         with open(file_path, "wb") as buffer:
             buffer.write(await file.read())
         logger.debug("File saved successfully")
 
-        if relationships:
-            relationships = json.loads(relationships)
-            parsed_relationships = [Relationship(**rel) for rel in relationships]
-            logger.debug(f"Parsed relationships: {parsed_relationships}")
+        # Parse the graph model data
+        model_data = json.loads(data)
+        graph_model = GraphModel(
+            sheet_connections=model_data["sheet_connections"],
+            sheet_references=model_data["sheet_references"],
+        )
+        logger.debug("Graph model parsed successfully", graph_model)
 
         # Initialize database connection
         db = Database(uri=DB_URI, user=DB_USER, password=DB_PASSWORD)
-        logger.info("Connected to database")
+        logger.debug("Database connection established")
 
-        # Process the file
-        ex = Extractor(path=file_path, db=db, primary_key=primary_key)
-        ex.extract_file()
-        ex.create_relationships(parsed_relationships)
-        ex.unify_nodes()
+        # Process the file using the extractor
+        extractor = Extractor(path=file_path)
+        extractor.new_extract(db=db, graph_model=graph_model)
+        logger.info("File processed and data extracted to database successfully")
 
-        logger.info(f"File processed successfully: {file.filename}")
-        return {"message": "File processed successfully", "file_name": file.filename}
+        return {
+            "status": "success",
+            "message": "File processed and data extracted to database successfully",
+        }
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "message": str(e),
+            },
+        )
+
+
+@app.post("/api/proteins")
+async def fetch_proteins(request: Request):
+    try:
+        payload = await request.json()
+        uniprot_ids = payload.get("uniprot_ids", [])
+
+        if not isinstance(uniprot_ids, list):
+            return {"error": "uniprot_ids must be a list of strings"}, 400
+
+        if not uniprot_ids:
+            return {"error": "No UniProt IDs provided"}, 400
+
+        logger.info(f"Fetching sequences for {len(uniprot_ids)} proteins")
+        sequences = await fetch_uniprot_protein_fasta(uniprot_ids)
+
+        return {"sequences": sequences}
+    except Exception as e:
+        logger.error(f"Error fetching protein sequences: {str(e)}")
         raise
 
 

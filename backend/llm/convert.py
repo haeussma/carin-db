@@ -1,10 +1,11 @@
 import instructor
-from db.db_connect import Database
 from devtools import pprint
-from llm.models import MappingInstruction
 from openai import OpenAI
 
-MODEL = "gpt-4o"
+from ..services.db_service import Database
+from .models import MappingInstruction
+
+MODEL = "gpt-4"
 
 client = instructor.patch(OpenAI(), mode=instructor.Mode.MD_JSON)
 
@@ -15,48 +16,63 @@ tools = [
         "type": "function",
         "function": {
             "name": "get_cypher_query",
-            "description": "Get a cypher query to extract data that is likely needed to map to the provided JSON schema. Attributes in the database and JSON schema should mean the same thing but can have different names. Context of the node and relationship names should be considered.",
+            "description": """Generate a Cypher query to extract data from Neo4j database.
+            The query should match the requirements of the JSON schema while considering semantic meaning of attributes.
+            Only use node labels and relationships that exist in the database schema.""",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The plain cypher query without any comments.",
-                    },
+                        "description": "A valid Cypher query that will return data matching the JSON schema requirements.",
+                    }
                 },
                 "required": ["query"],
                 "additionalProperties": False,
             },
+            "strict": True,
         },
     },
     {
         "type": "function",
         "function": {
             "name": "get_query_clarification",
-            "description": "Get a clarification on the cypher query to extract data from a Neo4j database for later mapping to a JSON schema. This can be a question which attribute in the db corresponds to a specific attribute in the JSON schema. If a property exists multiple time, this does not need to be clarified.",
+            "description": """Request clarification about mapping database attributes to JSON schema fields.
+            Use this when uncertain about attribute correspondence or when multiple candidates exist.""",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "question": {
                         "type": "string",
-                        "description": "Suggestions and questions form the system to the user on what to use in the cypher query.",
-                    },
+                        "description": "A specific question about which database attribute corresponds to which JSON schema field.",
+                    }
                 },
                 "required": ["question"],
                 "additionalProperties": False,
             },
+            "strict": True,
         },
     },
 ]
 
 
-def handle_user_prompt(prompt):
+def handle_user_prompt(prompt: str) -> MappingInstruction:
+    """Handle user's data mapping request.
+
+    Args:
+        prompt: User's request for data mapping
+
+    Returns:
+        MappingInstruction: Contains database selection criteria and JSON schema
+    """
     return client.chat.completions.create(
         model=MODEL,
         messages=[
             {
                 "role": "system",
-                "content": "You are a data assistant tasked to help users with mapping their data from a database to a JSON schema.",
+                "content": """You are a data assistant that helps users map database data to JSON schemas.
+                Your task is to understand the user's requirements and generate appropriate database queries.
+                Always validate that required fields in the JSON schema can be satisfied by the database schema.""",
             },
             {
                 "role": "user",
@@ -64,35 +80,53 @@ def handle_user_prompt(prompt):
             },
         ],
         response_model=MappingInstruction,
-    )
+    )  # type: ignore
 
 
 def create_neo4j_query(addition_instruction: str, json_schema: dict):
+    """Create a Neo4j query based on data requirements.
+
+    Args:
+        addition_instruction: Additional filtering/selection criteria
+        json_schema: Target JSON schema for the data
+
+    Returns:
+        OpenAI completion response with query generation
+    """
     return client.chat.completions.create(
         model=MODEL,
         messages=[
             {
                 "role": "system",
-                "content": f"""
-                You are a data assistant tasked to write a cypher query to extract data from a Neo4j database.
-                Based on the provided JSON schema, and additional instruction what subset of data to include, 
-                write a cypher query that extracts the data from the database.
+                "content": f"""You are a Neo4j expert tasked with writing Cypher queries.
+                Database Schema: {db.get_db_structure.model_dump_json()}
                 
-                The database contains the following node and relationships: {db.get_db_structure.model_dump_json()}
-                Only use these nodes and relationships to extract the data. If in relevant information is missing in the database,
-                ask the user for clarification.
-
-                Make sure to extract all neccessary data to map it to the provided JSON schema. If in doubt if a node or attribute 
-                is matching the schema, ask the user for clarification.
+                Guidelines:
+                1. Only use existing nodes and relationships
+                2. Ensure all required JSON schema fields are mapped
+                3. Ask for clarification if attribute mapping is ambiguous
+                4. Consider semantic meaning when mapping fields
                 """,
             },
             {
                 "role": "user",
-                "content": f"Here are additional data subsetting instructions: {addition_instruction} and the JSON schema: {json_schema}",
+                "content": f"Data requirements: {addition_instruction}\nJSON schema: {json_schema}",
             },
         ],
         tools=tools,
     )
+
+
+def execute_query(query: str) -> list:
+    """Execute a Cypher query against the Neo4j database.
+
+    Args:
+        query: Valid Cypher query string
+
+    Returns:
+        list: Query results from Neo4j
+    """
+    return db.execute_query(query)
 
 
 query: str = """
@@ -118,15 +152,9 @@ Get all experimental data where the induction concentration was 1. ans map it to
 }
 """
 
-
 r1 = handle_user_prompt(query)
 r2 = create_neo4j_query(
     addition_instruction=r1.database_selection, json_schema=r1.json_schema
 )
-
-
-def execute_query(query: str):
-    return db.execute_query(query)
-
 
 pprint(r2)

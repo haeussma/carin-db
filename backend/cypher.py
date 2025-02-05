@@ -1,7 +1,8 @@
 from typing import List
 
 import pandas as pd
-from models import Relationship
+
+# from backend.models.error_model import Relationship
 
 
 class CypherQueryGenerator:
@@ -27,9 +28,7 @@ class CypherQueryGenerator:
         """
 
     @staticmethod
-    def generate_relationship_query(
-        relationship: Relationship, primary_key: str, path: str
-    ) -> str:
+    def generate_relationship_query(relationship, primary_key: str, path: str) -> str:
         """
         Generates a Cypher query to create relationships between nodes that have the same primary key and source_path_of_data.
 

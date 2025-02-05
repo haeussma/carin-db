@@ -1,6 +1,8 @@
+from typing import Any
+
 from neo4j import Driver, GraphDatabase
 
-from .models import DBStructure, Node, Relationship
+from .models import Attribute, DBStructure, Node, Relationship
 
 
 class Database:
@@ -27,7 +29,7 @@ class Database:
             return session.run(query).data()
 
     @property
-    def get_graph_info_dict(self) -> dict:
+    def get_graph_info_dict(self) -> dict[str, Any]:
         """Returns a dictionary containing the graph schema information
         containing node labels, relationship types, and their properties.
         """
@@ -38,25 +40,7 @@ class Database:
         )
 
     @property
-    def node_properties(self) -> list[Node]:
-        """
-        Returns a list of dictionaries containing the node labels and their properties.
-        """
-        node_properties_query = """
-            CALL apoc.meta.data()
-            YIELD label, other, elementType, type, property
-            WHERE NOT type = "RELATIONSHIP" AND elementType = "node"
-            WITH label AS nodeLabels, collect(property) AS properties
-            RETURN {name: nodeLabels, properties: properties} AS output
-            """
-
-        with self.driver.session() as session:
-            response = session.run(node_properties_query).data()
-
-            return [Node(**record["output"]) for record in response]
-
-    @property
-    def relationship_properties(self) -> list[dict]:
+    def relationship_properties(self) -> list[dict[str, Any]]:
         """
         Returns a list of dictionaries containing the relationship types and their properties.
         """
@@ -95,3 +79,33 @@ class Database:
             nodes=self.node_properties,
             relationships=self.relationships,
         )
+
+    @property
+    def node_properties(self) -> list[Node]:
+        node_query = """
+        CALL apoc.meta.nodeTypeProperties()
+        YIELD nodeType AS name, propertyName AS attribute, propertyTypes AS data_type
+        RETURN name, collect({name: attribute, data_type: data_type[0]}) AS attributes
+        """
+
+        with self.driver.session() as session:
+            nodes_data = session.run(node_query).data()
+            nodes = [
+                Node(
+                    name=node["name"],
+                    attributes=[
+                        Attribute(name=attr["name"], data_type=attr["data_type"])
+                        for attr in node["attributes"]
+                    ],
+                )
+                for node in nodes_data
+            ]
+
+        return nodes
+
+
+if __name__ == "__main__":
+    from devtools import pprint
+
+    db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
+    pprint(db.get_db_structure)

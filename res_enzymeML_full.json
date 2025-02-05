@@ -1,0 +1,239 @@
+{
+    "data_model_name": "EnzymeMLDocument",
+    "classes": [
+        {
+            "class_name": "Creator",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "given_name",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Source_Biocatalyst",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "family_name",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Production_organism",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "mail",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "source_path_of_data",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "Vessel",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "volume",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Volume_in_reaction",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "unit",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "volume_unit",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "Complex",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "id",
+                "name",
+                "constant",
+                "vessel_id",
+                "participants"
+            ]
+        },
+        {
+            "class_name": "SmallMolecule",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "id",
+                "name",
+                "constant",
+                "vessel_id",
+                "canonical_smiles",
+                "inchi",
+                "inchikey",
+                "references"
+            ]
+        },
+        {
+            "class_name": "Measurement",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "name",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Sequence_ID_publication",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "species_data",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Sequence_DNA",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "MeasurementData",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "species_id",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Component_3",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "initial",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Component_4",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "data_unit",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "component__1__concentration_Unit",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "Parameter",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "id",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Sequence_aminoacid",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "name",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Sequence_plasmid",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "symbol",
+                    "node_name": "Biocatalyst",
+                    "node_attribute": "Position",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "Protein",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "id",
+                "name",
+                "constant",
+                "sequence",
+                "vessel_id",
+                "ecnumber",
+                "organism",
+                "organism_tax_id",
+                "references"
+            ]
+        },
+        {
+            "class_name": "Reaction",
+            "existing_fields_mapping": [
+                {
+                    "data_model_field": "id",
+                    "node_name": "Reaction",
+                    "node_attribute": "Product_PID",
+                    "is_mandatory": true
+                },
+                {
+                    "data_model_field": "name",
+                    "node_name": "Reaction",
+                    "node_attribute": "substrate",
+                    "is_mandatory": true
+                }
+            ],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "Equation",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "equation",
+                "equation_type",
+                "species_id",
+                "variables"
+            ]
+        },
+        {
+            "class_name": "EquationType",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "BaseUnit",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "kind",
+                "exponent",
+                "multiplier",
+                "scale",
+                "ld_id",
+                "ld_type",
+                "ld_context"
+            ]
+        },
+        {
+            "class_name": "UnitDefinition",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "id",
+                "name",
+                "base_units",
+                "ld_id",
+                "ld_type",
+                "ld_context"
+            ]
+        },
+        {
+            "class_name": "Variable",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "id",
+                "name",
+                "symbol",
+                "ld_id",
+                "ld_type",
+                "ld_context"
+            ]
+        },
+        {
+            "class_name": "DataTypes",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": []
+        },
+        {
+            "class_name": "ReactionElement",
+            "existing_fields_mapping": [],
+            "missing_fields_mapping": [
+                "species_id",
+                "stoichiometry",
+                "ld_id",
+                "ld_type",
+                "ld_context"
+            ]
+        }
+    ]
+}

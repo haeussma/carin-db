@@ -7,12 +7,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install poetry
+RUN pip install poetry
 
-# Install additional dependencies that might be missing
-RUN pip install instructor openai devtools
+# Copy only dependency files first from the backend folder
+COPY backend/pyproject.toml backend/poetry.lock* ./
+
+# Configure poetry to not create a virtual environment in the container
+RUN poetry config virtualenvs.create false
+
+# Install dependencies
+RUN poetry install --no-root --no-interaction --no-ansi
 
 # Copy the rest of the application
 COPY . .
@@ -26,5 +31,5 @@ RUN mkdir -p /app/logs
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"] 
+# Command to run the application with hot reload
+CMD ["poetry", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]

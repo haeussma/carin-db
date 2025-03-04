@@ -74,9 +74,9 @@ export function SettingsCard({ onClose }: SettingsCardProps) {
     }
 
     return (
-        <Card className="w-full max-w-lg">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-2xl font-bold">Settings</CardTitle>
+        <div className="w-full max-w-lg border rounded-lg shadow-sm">
+            <div className="flex flex-row items-center justify-between p-4 border-b">
+                <h2 className="text-2xl font-bold">Settings</h2>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -85,8 +85,8 @@ export function SettingsCard({ onClose }: SettingsCardProps) {
                 >
                     <X className="h-4 w-4" />
                 </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            </div>
+            <div className="p-4 space-y-4">
                 <div className="space-y-2">
                     <Label htmlFor="apiKey">OpenAI API Key</Label>
                     <Input
@@ -103,43 +103,30 @@ export function SettingsCard({ onClose }: SettingsCardProps) {
                         <div className="text-sm text-red-500">{error}</div>
                     )}
                 </div>
-                <Tabs defaultValue="openai" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="openai">OpenAI</TabsTrigger>
-                        <TabsTrigger value="database">Database</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="openai">
-                        <div className="space-y-2">
-                            <Label htmlFor="openai-key">OpenAI API Key</Label>
-                            <Input
-                                id="openai-key"
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                type="password"
-                                placeholder="Enter your OpenAI API key"
-                            />
-                        </div>
-                    </TabsContent>
-                    <TabsContent value="database">
-                        <div className="space-y-2">
-                            <Label htmlFor="db-address">Database Address</Label>
-                            <Input
-                                id="db-address"
-                                value={dbAddress}
-                                onChange={(e) => setDbAddress(e.target.value)}
-                                placeholder="Enter database address"
-                            />
-                            <Label htmlFor="db-password">Database Password</Label>
-                            <Input
-                                id="db-password"
-                                value={dbPassword}
-                                onChange={(e) => setDbPassword(e.target.value)}
-                                type="password"
-                                placeholder="Enter database password"
-                            />
-                        </div>
-                    </TabsContent>
-                </Tabs>
+                <div className="space-y-2">
+                    <Label htmlFor="db-address">URL</Label>
+                    <Input
+                        id="db-address"
+                        value={dbAddress}
+                        onChange={(e) => setDbAddress(e.target.value)}
+                        placeholder="bolt://localhost:7687"
+                    />
+                    <Label htmlFor="db-address">Username</Label>
+                    <Input
+                        id="db-address"
+                        value={dbAddress}
+                        onChange={(e) => setDbAddress(e.target.value)}
+                        placeholder="neo4j"
+                    />
+                    <Label htmlFor="db-password">Password</Label>
+                    <Input
+                        id="db-password"
+                        value={dbPassword}
+                        onChange={(e) => setDbPassword(e.target.value)}
+                        type="password"
+                        placeholder=""
+                    />
+                </div>
                 <div className="flex gap-2">
                     <Button
                         onClick={handleSave}
@@ -156,8 +143,7 @@ export function SettingsCard({ onClose }: SettingsCardProps) {
                         Clear
                     </Button>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     )
 }
-

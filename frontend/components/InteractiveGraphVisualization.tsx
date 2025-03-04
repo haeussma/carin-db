@@ -15,7 +15,10 @@ import ReactFlow, {
     useEdgesState,
     useReactFlow,
     ReactFlowProvider,
-    NodeProps
+    NodeProps,
+    BaseEdge,
+    EdgeProps,
+    getSmoothStepPath,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -88,7 +91,69 @@ const CustomNode: React.FC<NodeProps> = ({ data }) => (
     </TooltipProvider>
 );
 
+// Custom MultiEdge component
+const MultiEdge: React.FC<EdgeProps> = ({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    data,
+    style,
+    markerEnd,
+}) => {
+    const offset = data?.offset || 0;
+    const [edgePath] = getSmoothStepPath({
+        sourceX,
+        sourceY: sourceY + offset,
+        sourcePosition,
+        targetX,
+        targetY: targetY + offset,
+        targetPosition,
+    });
+
+    return (
+        <BaseEdge
+            path={edgePath}
+            markerEnd={markerEnd}
+            style={style}
+        />
+    );
+};
+
 const nodeTypes = { custom: CustomNode };
+const edgeTypes = { multiEdge: MultiEdge };
+
+const computeReferenceEdges = (sheetReferences: SheetReference[]): Edge[] => {
+    // Group references by "source-target" key
+    const groups: Record<string, SheetReference[]> = {};
+    sheetReferences.forEach((ref) => {
+        const key = `${ref.source_sheet_name}-${ref.target_sheet_name}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(ref);
+    });
+
+    const edges: Edge[] = [];
+    Object.values(groups).forEach((refs) => {
+        const count = refs.length;
+        // For each reference in the group, assign an offset
+        refs.forEach((ref, index) => {
+            const offset = (index - (count - 1) / 2) * 15;
+            edges.push({
+                id: `e-ref-${ref.source_sheet_name}-${ref.target_sheet_name}-${index}`,
+                source: ref.source_sheet_name,
+                target: ref.target_sheet_name,
+                label: ref.source_column_name,
+                type: "multiEdge",
+                data: { offset },
+                style: { stroke: "#f6ad55" },
+            });
+        });
+    });
+    return edges;
+};
 
 //
 // Flow Component: Creates and updates nodes/edges from props
@@ -120,14 +185,9 @@ const Flow: React.FC<InteractiveGraphVisualizationProps> = ({
             type: "smoothstep",
             animated: true,
         }));
-        const referenceEdges: Edge[] = sheetReferences.map((ref, idx) => ({
-            id: `e-ref-${idx}`,
-            source: ref.source_sheet_name,
-            target: ref.target_sheet_name,
-            label: `${ref.source_column_name} -> ${ref.target_column_name}`,
-            type: "smoothstep",
-            style: { stroke: "#f6ad55" },
-        }));
+
+        const referenceEdges = computeReferenceEdges(sheetReferences);
+
         return [...connectionEdges, ...referenceEdges];
     }, [sheetConnections, sheetReferences]);
 
@@ -164,6 +224,7 @@ const Flow: React.FC<InteractiveGraphVisualizationProps> = ({
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             attributionPosition="bottom-left"
             connectionLineType={ConnectionLineType.SmoothStep}

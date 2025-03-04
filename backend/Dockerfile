@@ -28,8 +28,11 @@ ENV PYTHONPATH=/app
 # Create logs directory
 RUN mkdir -p /app/logs
 
+# Ensure an empty .env file exists
+RUN touch /app/.env
+
 # Expose the port the app runs on
 EXPOSE 8000
 
 # Command to run the application with hot reload
-CMD ["poetry", "run", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+CMD ["sh", "-c", "poetry run uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app"]

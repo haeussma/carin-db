@@ -164,3 +164,5 @@ poetry.lock
 test.ipynb
 dev_examples
 .DS_Store
+
+.envv

@@ -124,7 +124,8 @@ class Extractor:
 
     def _parse_source_values(self, values: pd.Series) -> List[List[str]]:
         """Parse source values into lists of strings, handling NaN values."""
-        result = []
+
+        result: List[List[str]] = []
         for value in values:
             if pd.isna(value):
                 result.append([])

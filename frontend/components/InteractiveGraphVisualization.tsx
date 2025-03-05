@@ -240,13 +240,7 @@ const Flow: React.FC<InteractiveGraphVisualizationProps> = ({
 //
 const InteractiveGraphVisualization: React.FC<InteractiveGraphVisualizationProps> = (props) => {
     return (
-        <Card className="w-full max-w-4xl h-[600px]">
-            <CardHeader>
-                <CardTitle>Interactive Graph Visualization</CardTitle>
-                <CardDescription>
-                    Live view of your sheet model, connections, and references.
-                </CardDescription>
-            </CardHeader>
+        <Card className="w-full mx-auto p-4">
             <CardContent className="h-[500px]">
                 <ReactFlowProvider>
                     <Flow {...props} />

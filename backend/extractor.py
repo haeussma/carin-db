@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import List, Optional
 
@@ -15,6 +16,8 @@ from .models.error_model import (
 from .models.graph_model import GraphModel, SheetConnection, SheetReferences
 from .models.sheet_model import Column, Sheet, SheetModel
 from .services.db_service import Database
+
+logger = logging.getLogger(__name__)
 
 
 class Extractor:
@@ -253,6 +256,8 @@ class Extractor:
         self, connection: SheetConnection, sheet_model: SheetModel
     ) -> None:
         """Validate a single sheet connection."""
+        logger.debug(f"Connection: {connection}")
+        logger.debug(f"Sheet model: {sheet_model}")
         source_sheet = next(
             (
                 sheet
@@ -261,6 +266,7 @@ class Extractor:
             ),
             None,
         )
+        logger.debug(f"Source sheet: {source_sheet}")
         if source_sheet is None:
             raise ValueError(
                 f"Sheet {connection.source_sheet_name} not found in sheet model"

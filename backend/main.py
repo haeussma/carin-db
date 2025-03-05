@@ -18,9 +18,6 @@ from .models.graph_model import GraphModel
 from .services.db_service import Database
 from .services.openai_service import OpenAIService
 
-ENV_FILE_PATH = "/app/.env"
-
-
 # -----  Configure logger -----
 logger.remove()  # Remove default handler
 logger.add(
@@ -226,14 +223,20 @@ async def process_file(
 
         # Parse the graph model data
         model_data = json.loads(data)
+        logger.debug(f"Received model data: {model_data}")
+
         graph_model = GraphModel(
             sheet_connections=model_data["sheet_connections"],
             sheet_references=model_data["sheet_references"],
         )
-        logger.debug("Graph model parsed successfully", graph_model)
+        logger.debug(f"Graph model parsed successfully: {graph_model}")
+        # write model data to file
+        with open("graph_model.json", "w") as f:
+            json.dump(graph_model.model_dump(mode="json"), f)
 
         # Initialize database connection
-        db_settings = get_db_settings()
+        db_settings = await get_db_settings()
+        logger.debug(f"Database settings: \n{db_settings}")
         db = Database(
             uri=db_settings["url"],
             user=db_settings["username"],
@@ -243,7 +246,9 @@ async def process_file(
 
         # Process the file using the extractor
         extractor = Extractor(path=file_path)
+
         extractor.new_extract(db=db, graph_model=graph_model)
+
         logger.info("File processed and data extracted to database successfully")
 
         return {
@@ -251,12 +256,16 @@ async def process_file(
             "message": "File processed and data extracted to database successfully",
         }
     except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
+        error_message = str(e)
+        logger.error(f"Error processing file: {error_message}")
+
+        # Return a more detailed error response
         return JSONResponse(
             status_code=400,
             content={
                 "status": "error",
-                "message": str(e),
+                "message": "Error processing file",
+                "detail": error_message,
             },
         )
 
@@ -285,7 +294,7 @@ async def fetch_proteins(request: Request):
 # -----  Environment variables -----
 @app.post("/api/save_openai_key")
 async def save_openai_key(request: Request):
-    """Save OpenAI API key to environment file."""
+    """Save OpenAI API key to environment variables."""
     try:
         payload = await request.json()
         api_key = payload.get("api_key")
@@ -295,20 +304,9 @@ async def save_openai_key(request: Request):
                 status_code=400, detail={"error": {"message": "API key is required"}}
             )
 
-        # Read existing .env values
-        env_data = {}
-        if os.path.exists(ENV_FILE_PATH):
-            with open(ENV_FILE_PATH, "r") as f:
-                for line in f:
-                    key, _, value = line.strip().partition("=")
-                    env_data[key] = value
-
-        # Update or add new values
-        env_data["OPENAI_API_KEY"] = api_key
-
-        # Write back to .env file
-        with open(ENV_FILE_PATH, "w") as f:
-            f.writelines(f"{key}={value}\n" for key, value in env_data.items())
+        # Set environment variable directly
+        os.environ["OPENAI_API_KEY"] = api_key
+        logger.info("OpenAI API key saved to environment variables")
 
         return {"message": "API key saved successfully"}
 
@@ -323,40 +321,25 @@ async def save_openai_key(request: Request):
 
 @app.get("/api/get_openai_key")
 async def get_openai_key():
-    """Retrieve the OpenAI API Key from .env file."""
-    if not os.path.exists(ENV_FILE_PATH):
-        return {"error": "No API key found"}, 404
+    """Retrieve the OpenAI API Key from environment variables."""
+    api_key = os.environ.get("OPENAI_API_KEY")
 
-    with open(ENV_FILE_PATH, "r") as f:
-        for line in f:
-            if line.startswith("OPENAI_API_KEY="):
-                return {"api_key": line.split("=", 1)[1].strip()}
+    if not api_key:
+        return {"error": "API key not found"}, 404
 
-    return {"error": "API key not found"}, 404
+    return {"api_key": api_key}
 
 
 # -----  Database settings -----
 @app.get("/api/get_db_settings")
 async def get_db_settings():
-    # Read existing .env file
-    env_lines = []
-    if os.path.exists(ENV_FILE_PATH):
-        with open(ENV_FILE_PATH, "r") as f:
-            env_lines = f.readlines()
-
-    url = username = password = None
-
-    # Update or add OPENAI_API_KEY
-    for line in env_lines:
-        if line.startswith("NEO4J_URI="):
-            url = line.split("=", 1)[1].strip()
-        if line.startswith("NEO4J_USER="):
-            username = line.split("=", 1)[1].strip()
-        if line.startswith("NEO4J_PASSWORD="):
-            password = line.split("=", 1)[1].strip()
+    """Get database settings from environment variables."""
+    url = os.environ.get("NEO4J_URI")
+    username = os.environ.get("NEO4J_USER")
+    password = os.environ.get("NEO4J_PASSWORD")
 
     if not all([url, username, password]):
-        logger.warning("Database settings not found")
+        logger.warning("Database settings not found in environment variables")
 
     return {
         "url": url,
@@ -367,30 +350,177 @@ async def get_db_settings():
 
 @app.post("/api/save_db_settings")
 async def save_db_settings(request: Request):
-    """Update or create Neo4j database settings in .env."""
+    """Update Neo4j database settings in environment variables."""
     payload = await request.json()
-    new_values = {
-        "NEO4J_URI": payload.get("url"),
-        "NEO4J_USER": payload.get("username"),
-        "NEO4J_PASSWORD": payload.get("password"),
+
+    # Update environment variables with new values
+    if payload.get("url") is not None:
+        os.environ["NEO4J_URI"] = payload.get("url")
+
+    if payload.get("username") is not None:
+        os.environ["NEO4J_USER"] = payload.get("username")
+
+    if payload.get("password") is not None:
+        os.environ["NEO4J_PASSWORD"] = payload.get("password")
+
+    logger.info("Neo4j settings updated in environment variables")
+    return {"message": "Neo4j settings updated successfully"}
+
+
+# Helper function to get database settings directly
+def _get_db_settings_direct():
+    url = os.environ.get("NEO4J_URI")
+    username = os.environ.get("NEO4J_USER")
+    password = os.environ.get("NEO4J_PASSWORD")
+
+    # Docker container networking fix:
+    # If we detect localhost in the URL and we're running in Docker,
+    # replace it with the proper container service name
+    if url and "localhost" in url:
+        # Check if we're running in Docker
+        if os.path.exists("/.dockerenv"):
+            # Replace localhost with neo4j service name and use internal port
+            docker_url = url.replace("localhost", "neo4j")
+            # Ensure we're using the internal port 7687, not the exposed 7692
+            if ":7692" in docker_url:
+                docker_url = docker_url.replace(":7692", ":7687")
+            logger.info(
+                f"Docker environment detected. Changed Neo4j URL from {url} to {docker_url}"
+            )
+            url = docker_url
+
+    return {
+        "url": url,
+        "username": username,
+        "password": password,
     }
 
-    # Read existing .env values
-    env_data = {}
-    if os.path.exists(ENV_FILE_PATH):
-        with open(ENV_FILE_PATH, "r") as f:
-            for line in f:
-                key, _, value = line.strip().partition("=")
-                env_data[key] = value
 
-    # Update or add new values
-    env_data.update({k: v for k, v in new_values.items() if v is not None})
+@app.get("/api/get_node_count")
+async def get_node_count():
+    try:
+        db_settings = _get_db_settings_direct()
 
-    # Write back to .env file
-    with open(ENV_FILE_PATH, "w") as f:
-        f.writelines(f"{key}={value}\n" for key, value in env_data.items())
+        # Check if we have valid database settings
+        if not all(
+            [db_settings["url"], db_settings["username"], db_settings["password"]]
+        ):
+            return {
+                "error": "Database connection settings are not configured. Please set them in Settings."
+            }
 
-    return {"message": "Neo4j settings updated successfully"}
+        try:
+            db = Database(
+                uri=db_settings["url"],
+                user=db_settings["username"],
+                password=db_settings["password"],
+            )
+            return db.node_count
+        except Exception as conn_err:
+            # Handle specific connection errors with helpful messages
+            error_str = str(conn_err)
+
+            if "Connection refused" in error_str:
+                port = "7687"  # Default Neo4j port
+                # Try to extract port from URL if possible
+                if db_settings["url"] and ":" in db_settings["url"]:
+                    port = db_settings["url"].split(":")[-1]
+
+                # Check if we're in Docker environment
+                is_docker = os.path.exists("/.dockerenv")
+
+                if is_docker and "localhost" in db_settings["url"]:
+                    return {
+                        "error": f"Cannot connect to Neo4j database. Docker networking issue detected.\n\n"
+                        f"When using Docker, you should connect to the Neo4j container using the service name:\n"
+                        f"• Change connection URL from '{db_settings['url']}' to 'neo4j:7687'\n"
+                        f"• Or update your .env file with: NEO4J_URI=bolt://neo4j:7687"
+                    }
+                else:
+                    return {
+                        "error": f"Cannot connect to Neo4j database at port {port}. Please ensure that:\n\n"
+                        f"1. Neo4j server is running\n"
+                        f"2. The configured URL ({db_settings['url']}) is correct\n"
+                        f"3. No firewall is blocking the connection"
+                    }
+            elif (
+                "authentication failure" in error_str.lower()
+                or "unauthorized" in error_str.lower()
+            ):
+                return {
+                    "error": "Authentication failed. Please check your Neo4j username and password in Settings."
+                }
+            else:
+                # Return general connection error
+                return {"error": f"Database connection error: {str(conn_err)}"}
+
+    except Exception as e:
+        logger.error(f"Error getting node count: {e}")
+        return {"error": f"Failed to get node count: {str(e)}"}
+
+
+# If you had a clear_openai_key function, update it as well
+@app.post("/api/clear_openai_key")
+async def clear_openai_key():
+    """Clear the OpenAI API key from environment variables."""
+    try:
+        if "OPENAI_API_KEY" in os.environ:
+            del os.environ["OPENAI_API_KEY"]
+            logger.info("OpenAI API key removed from environment variables")
+
+        return {"message": "API key cleared successfully"}
+    except Exception as e:
+        logger.error(f"Error clearing OpenAI API key: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail={"error": {"message": "Failed to clear API key"}}
+        )
+
+
+@app.get("/api/load_graph_model")
+def load_graph_model():
+    """Loads a `GraphModel` from file.
+    Returns empty dict if file does not exist."""
+    try:
+        # Use absolute path to ensure file is found regardless of where the server is started
+        file_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "graph_model.json"
+        )
+        logger.info(f"Loading graph model from: {file_path}")
+
+        with open(file_path, "r") as f:
+            data = json.load(f)
+            logger.info(f"Loaded graph model: {data}")
+            return data
+    except FileNotFoundError:
+        logger.info("No graph model file found")
+        return {}
+
+
+@app.post("/api/save_graph_model")
+async def save_graph_model(request: Request):
+    """Saves a `GraphModel` to file."""
+    try:
+        data = await request.json()
+        logger.info(f"Saving graph model: {data}")
+
+        # Use absolute path to ensure file is saved in a consistent location
+        file_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "graph_model.json"
+        )
+        logger.info(f"Saving graph model to: {file_path}")
+
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=2)
+        return {"status": "success", "message": "Graph model saved successfully"}
+    except Exception as e:
+        logger.error(f"Error saving graph model: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": f"Failed to save graph model: {str(e)}",
+            },
+        )
 
 
 if __name__ == "__main__":

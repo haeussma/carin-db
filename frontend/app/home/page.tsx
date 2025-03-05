@@ -1,13 +1,9 @@
-"use client";
-
-import Header from '@/components/header';
+import DatabaseNodeVisualization from '@/components/db-overview'
 
 export default function Page() {
     return (
-        <div className="min-h-screen bg-background text-foreground">
-            <div className="p-8 bg-card text-card-foreground space-y-8">
-                <div>Home Page Content</div>
-            </div>
+        <div>
+            <DatabaseNodeVisualization />
         </div>
-    );
+    )
 }

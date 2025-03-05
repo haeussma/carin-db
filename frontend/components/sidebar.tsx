@@ -66,7 +66,6 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                         <SidebarMenuButton size="lg">
                             <div className="flex flex-col gap-0.5 leading-none">
                                 <span className="font-semibold">Data Manager</span>
-                                <span className="text-xs text-muted-foreground">From spreadsheet</span>
                             </div>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -95,32 +94,6 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                                             <span>Edit</span>
                                         </Link>
                                     </SidebarMenuButton>
-                                    <SidebarMenuSub>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton asChild isActive={isActive("/edit/add-data")}>
-                                                <Link href="/edit/add-data">
-                                                    <PlusCircle className="size-4" />
-                                                    <span>Add data</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton asChild isActive={isActive("/edit/search")}>
-                                                <Link href="/edit/search">
-                                                    <Search className="size-4" />
-                                                    <span>Search</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                        <SidebarMenuSubItem>
-                                            <SidebarMenuSubButton asChild isActive={isActive("/edit/ask")}>
-                                                <Link href="/edit/ask">
-                                                    <HelpCircle className="size-4" />
-                                                    <span>Ask</span>
-                                                </Link>
-                                            </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                    </SidebarMenuSub>
                                 </SidebarMenuItem>
                             </CollapsibleContent>
                         </Collapsible>
@@ -143,10 +116,12 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="rounded-full"
+                        className="h-9 w-9"
                         onClick={() => setShowSettings(true)}
+                        data-settings-button
                     >
                         <Settings className="h-4 w-4" />
+                        <span className="sr-only">Settings</span>
                     </Button>
                     <Button
                         variant="ghost"

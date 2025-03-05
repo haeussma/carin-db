@@ -103,9 +103,21 @@ class Database:
 
         return nodes
 
+    @property
+    def node_count(self) -> dict[str, int]:
+        query = """
+            CALL apoc.meta.stats() YIELD labels
+            RETURN labels
+        """
+
+        with self.driver.session() as session:
+            response = session.run(query).data()
+
+        return response[0]["labels"]
+
 
 if __name__ == "__main__":
     from devtools import pprint
 
     db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
-    pprint(db.get_db_structure)
+    pprint(db.node_count)

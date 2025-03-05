@@ -165,4 +165,5 @@ test.ipynb
 dev_examples
 .DS_Store
 
-.envv
+.env
+test_data/

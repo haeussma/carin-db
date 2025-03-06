@@ -18,10 +18,10 @@ export default function Page() {
           <DataTableCard />
         </section>
 
-        {/* Ask */}
+        {/* Ask
         <section id="ask" className="w-full">
           <AskCard />
-        </section>
+        </section> */}
       </div>
     </div>
   );

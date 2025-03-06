@@ -2,14 +2,13 @@ import instructor
 from devtools import pprint
 from openai import OpenAI
 
-from ..services.db_service import Database
 from .models import MappingInstruction
 
 MODEL = "gpt-4"
 
 client = instructor.patch(OpenAI(), mode=instructor.Mode.MD_JSON)
 
-db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
+# db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
 
 tools = [
     {

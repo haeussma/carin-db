@@ -58,7 +58,7 @@ class Chat:
                 Do not use any other relationship types or properties that are not provided.
             
                 ## Cypher Query Requirements
-                Make sure to return the data using the exact node attribute names from the database, without adding prefixes, transformations, or query-based aliasing. Therefore, use the AS keyword
+                Make sure to return the data using the exact node attribute names from the database, without adding prefixes, transformations, or query-based aliasing. Therefore, use the AS keyword.
 
                 """,
             },

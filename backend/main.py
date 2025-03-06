@@ -11,12 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 
+from .chat import Chat
 from .exceptions import TypeInconsistencyError
 from .extractor import Extractor
 from .fetch_external_api import fetch_uniprot_protein_fasta
 from .models.graph_model import GraphModel
 from .services.db_service import Database
-from .services.openai_service import OpenAIService
 
 # -----  Configure logger -----
 logger.remove()  # Remove default handler
@@ -32,6 +32,8 @@ logger.add(
 def sanitize_data(data):
     if isinstance(data, list):
         return [sanitize_data(item) for item in data]
+    elif isinstance(data, tuple):
+        return tuple(sanitize_data(item) for item in data)
     elif isinstance(data, dict):
         return {key: sanitize_data(value) for key, value in data.items()}
     elif isinstance(data, float):
@@ -107,35 +109,38 @@ async def ask(request: Request):
     """Handle ask requests with provided OpenAI API key."""
     try:
         body = await request.json()
-        question = body.get("question", "")
-
-        # Get OpenAI API key from header
-        api_key = request.headers.get("X-OpenAI-Key")
-        if not api_key:
-            raise HTTPException(
-                status_code=401,
-                detail={"error": {"message": "OpenAI API key is required"}},
-            )
 
         # Initialize the OpenAI client
         try:
-            # Create DB service for the OpenAI service with environment variables
-            db_uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-            db_user = os.environ.get("NEO4J_USER", "neo4j")
-            db_password = os.environ.get("NEO4J_PASSWORD", "password")
+            db_uri = os.environ.get("NEO4J_URI")
+            db_user = os.environ.get("NEO4J_USER")
+            db_password = os.environ.get("NEO4J_PASSWORD")
+            openai_api_key = os.environ.get("OPENAI_API_KEY")
 
-            db_service = Database(uri=db_uri, user=db_user, password=db_password)
-            openai_service = OpenAIService(db_service, api_key)
+            if not openai_api_key:
+                raise HTTPException(
+                    status_code=401,
+                    detail={"error": {"message": "OpenAI API key is required"}},
+                )
 
             # Process the request with OpenAI
-            response = openai_service.create_chat_completion(
-                [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": question},
-                ]
+            chat = Chat(api_key=openai_api_key)
+            db = Database(
+                uri=db_uri or "", user=db_user or "", password=db_password or ""
             )
+            db_info = db.get_db_structure
+            response = chat.get_cypher(question=body["question"], db_info=db_info)
+            response = sanitize_data(response)
 
-            return {"response": response.choices[0].message.content}
+            logger.info(f"OpenAI cypher query: {response}")
+            data = db.execute_query(response)
+            logger.info(f"Neo4j data: {data}")
+
+            # Sanitize the data before returning it to ensure NaN values are converted to None
+            sanitized_data = sanitize_data(data)
+            logger.info(f"Sanitized data: {sanitized_data}")
+
+            return {"response": sanitized_data}
         except Exception as e:
             # Extract the detailed error message from OpenAI exceptions
             error_message = str(e)

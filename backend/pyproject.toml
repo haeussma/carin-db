@@ -17,6 +17,7 @@ loguru = "^0.7.3"
 fastapi = "^0.115.7"
 neo4j = "^5.27.0"
 instructor = "^1.7.2"
+xlsxwriter = "^3.2.2"
 
 
 [tool.poetry.group.dev.dependencies]

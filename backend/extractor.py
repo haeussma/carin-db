@@ -1,8 +1,8 @@
-import logging
 import uuid
 from typing import List, Optional
 
 import pandas as pd
+from loguru import logger
 
 from .data_sanity import DataSanityChecker
 from .exceptions import (
@@ -16,8 +16,6 @@ from .models.error_model import (
 from .models.graph_model import GraphModel, SheetConnection, SheetReferences
 from .models.sheet_model import Column, Sheet, SheetModel
 from .services.db_service import Database
-
-logger = logging.getLogger(__name__)
 
 
 class Extractor:
@@ -399,6 +397,7 @@ class Extractor:
         """
         Extracts the validated data and creates the corresponding graph structure in Neo4j.
         """
+        logger.info("Starting data extraction to database")
 
         # Build a mapping of sheet name -> primary key using sheet_connections
         primary_keys = {}
@@ -412,14 +411,23 @@ class Extractor:
                 df = self.sheets[name]
                 primary_keys[name] = df.columns[0]
 
+        logger.info(f"Using primary keys: {primary_keys}")
+
         with db.driver.session() as session:
             # --- Step 1: Create Nodes ---
             for sheet_name, df in self.sheets.items():
                 label = self.sanitize_label(sheet_name)
                 pk = primary_keys[sheet_name]
+                logger.info(
+                    f"Creating nodes for sheet {sheet_name} with label {label} and primary key {pk}"
+                )
+
                 for _, row in df.iterrows():
                     props = row.to_dict()
                     cypher_query = f"MERGE (n:{label} {{{pk}: $value}}) SET n += $props"
+                    logger.debug(
+                        f"Executing query: {cypher_query} with value={props[pk]}"
+                    )
                     session.run(cypher_query, value=props[pk], props=props)
 
             # --- Step 2: Create Relationships for Sheet Connections ---
@@ -428,12 +436,19 @@ class Extractor:
                 target_label = self.sanitize_label(connection.target_sheet_name)
                 key = connection.key
                 source_df = self.sheets[connection.source_sheet_name]
+                logger.info(
+                    f"Creating relationships for connection: {connection.source_sheet_name} -> {connection.edge_name} -> {connection.target_sheet_name}"
+                )
+
                 for _, row in source_df.iterrows():
                     key_value = row[key]
                     cypher_query = (
                         f"MATCH (s:{source_label} {{{key}: $key_value}}), "
                         f"(t:{target_label} {{{key}: $key_value}}) "
                         f"MERGE (s)-[r:{connection.edge_name.upper()}]->(t)"
+                    )
+                    logger.debug(
+                        f"Executing query: {cypher_query} with key_value={key_value}"
                     )
                     session.run(cypher_query, key_value=key_value)
 
@@ -446,30 +461,48 @@ class Extractor:
                 source_pk = primary_keys[reference.source_sheet_name]
                 # Generate a relationship type; here we use the source column name.
                 relationship_type = reference.source_column_name
+
+                logger.info(
+                    f"Creating reference relationships: {reference.source_sheet_name}.{reference.source_column_name} -> "
+                    f"{reference.target_sheet_name}.{reference.target_column_name}"
+                )
+
                 for _, row in source_df.iterrows():
                     source_node_id = row[source_pk]
                     cell_value = row[reference.source_column_name]
-                    if pd.isna(cell_value):
-                        continue
                     tokens = [
                         v.strip() for v in str(cell_value).split(",") if v.strip()
                     ]
+
+                    if not tokens:
+                        logger.warning(
+                            f"No valid tokens found in {cell_value} for row with pk={source_node_id}"
+                        )
+                        continue
+
                     for token in tokens:
                         cypher_query = (
                             f"MATCH (s:{source_label} {{{source_pk}: $source_id}}), "
                             f"(t:{target_label} {{{reference.target_column_name}: $target_value}}) "
                             f"MERGE (s)-[r:{relationship_type}]->(t)"
                         )
+                        logger.debug(
+                            f"Executing query: {cypher_query} with source_id={source_node_id}, target_value={token}"
+                        )
                         session.run(
                             cypher_query, source_id=source_node_id, target_value=token
                         )
+
+        logger.info("Data extraction completed successfully")
 
     def new_extract(self, db: Database, graph_model: GraphModel) -> None:
         """
         Validates the data against the graph model and extracts it to the database.
         """
-        self.validate_graph_model(graph_model)
-        self.extract_to_db(db, graph_model)
+        logger.info(f"Starting extraction process for file: {self.path}")
+        logger.info(
+            f"Graph model: {len(graph_model.sheet_connections)} connections, {len(graph_model.sheet_references)} references"
+        )
 
 
 if __name__ == "__main__":

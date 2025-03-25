@@ -1,8 +1,34 @@
 from typing import Any
 
+from loguru import logger
 from neo4j import Driver, GraphDatabase
+from neo4j.exceptions import (
+    AuthError,
+    DriverError,
+    Neo4jError,
+    ServiceUnavailable,
+    SessionExpired,
+)
 
-from .models import Attribute, DBStructure, Node, Relationship
+from ..models.appconfig import Attribute, GraphModel, Node, Relationship
+
+
+class DatabaseError(Exception):
+    """Base exception for database-related errors."""
+
+    pass
+
+
+class DatabaseConnectionError(DatabaseError):
+    """Raised when there are issues connecting to the database."""
+
+    pass
+
+
+class DatabaseAuthenticationError(DatabaseError):
+    """Raised when there are authentication issues."""
+
+    pass
 
 
 class Database:
@@ -15,14 +41,67 @@ class Database:
         self.uri = uri
         self.user = user
         self.driver = self.connect(uri, user, password)
+        self.validate_connection()
 
-    def close(self):
-        if self.driver:
+    def connect(self, uri: str, user: str, password: str) -> Driver:
+        """Create a Neo4j driver instance."""
+        try:
+            driver = GraphDatabase.driver(uri, auth=(user, password))
+            logger.debug(f"Created Neo4j driver for URI: {uri}")
+            return driver
+        except Exception as e:
+            logger.error(f"Failed to create Neo4j driver: {str(e)}")
+            raise DatabaseConnectionError(f"Failed to create Neo4j driver: {str(e)}")
+
+    def validate_connection(self) -> None:
+        """Validate the database connection by executing a simple query."""
+        try:
+            with self.driver.session() as session:
+                # Execute a simple query to verify connection
+                result = session.run("RETURN 1")
+                result.single()
+                logger.info("Database connection validated successfully")
+        except AuthError as e:
+            logger.error(f"Authentication failed: {str(e)}")
+            raise DatabaseAuthenticationError(f"Authentication failed: {str(e)}")
+        except ServiceUnavailable as e:
+            logger.error(f"Database service unavailable: {str(e)}")
+            raise DatabaseConnectionError(
+                f"Database service unavailable. Please check if:\n"
+                f"1. The Neo4j server is running\n"
+                f"2. The connection URL is correct\n"
+                f"3. The database is accessible from your network\n"
+                f"Current URL: {self.uri}"
+            )
+        except SessionExpired as e:
+            logger.error(f"Session expired: {str(e)}")
+            raise DatabaseConnectionError(f"Session expired: {str(e)}")
+        except DriverError as e:
+            logger.error(f"Driver error: {str(e)}")
+            raise DatabaseConnectionError(f"Driver error: {str(e)}")
+        except Neo4jError as e:
+            logger.error(f"Neo4j error: {str(e)}")
+            raise DatabaseError(f"Neo4j error: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error validating connection: {str(e)}")
+            raise DatabaseError(f"Unexpected error validating connection: {str(e)}")
+
+    def close(self) -> None:
+        """Close the database connection."""
+        try:
             self.driver.close()
+            logger.info("Database connection closed")
+        except Exception as e:
+            logger.error(f"Error closing database connection: {str(e)}")
+            raise DatabaseError(f"Error closing database connection: {str(e)}")
 
-    @staticmethod
-    def connect(uri: str, user: str, password: str) -> Driver:
-        return GraphDatabase.driver(uri, auth=(user, password))
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
 
     def execute_query(self, query: str):
         with self.driver.session() as session:
@@ -74,8 +153,8 @@ class Database:
             return [Relationship(**record["output"]) for record in response]
 
     @property
-    def get_db_structure(self) -> DBStructure:
-        return DBStructure(
+    def get_db_structure(self) -> GraphModel:
+        return GraphModel(
             nodes=self.node_properties,
             relationships=self.relationships,
         )
@@ -121,3 +200,5 @@ if __name__ == "__main__":
 
     db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
     pprint(db.node_count)
+
+    # pprint(db.get_db_structure)

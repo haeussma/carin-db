@@ -1,0 +1,42 @@
+{
+  "databases": [
+    {
+      "name": "test",
+      "uri": "bolt://neo4j:7687",
+      "username": "neo4j",
+      "password": "12345678",
+      "sheet_model": null,
+      "graph_model": null,
+      "ld_id": "md:DatabaseInfo/7708619f-4fc2-4d5e-8243-dca2797fa9b6",
+      "ld_type": [
+        "md:DatabaseInfo"
+      ],
+      "ld_context": {
+        "md": "http://mdmodel.net/"
+      }
+    },
+    {
+      "name": "other",
+      "uri": "neo4j://localhost:7687",
+      "username": "neo4j",
+      "password": "password",
+      "sheet_model": null,
+      "graph_model": null,
+      "ld_id": "md:DatabaseInfo/87f30843-fc28-4ca6-bd97-71413d75f011",
+      "ld_type": [
+        "md:DatabaseInfo"
+      ],
+      "ld_context": {
+        "md": "http://mdmodel.net/"
+      }
+    }
+  ],
+  "openai_api_key": null,
+  "ld_id": "md:AppConfig/6bd26bae-1bef-4af5-a89f-a39dbdea8bf6",
+  "ld_type": [
+    "md:AppConfig"
+  ],
+  "ld_context": {
+    "md": "http://mdmodel.net/"
+  }
+}

@@ -106,7 +106,7 @@ class Extractor:
         """Builds the sheet model. Should only be called after validation passes."""
         sheets = []
         for sheet_name in self.read_sheet_names():
-            df = self.read_sheet(sheet_name)
+        df = self.read_sheet(sheet_name)
             checker = DataSanityChecker(
                 df=df, sheet_name=sheet_name, path=self.path, primary_key=None
             )

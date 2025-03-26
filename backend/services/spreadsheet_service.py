@@ -9,7 +9,13 @@ from loguru import logger
 
 from ..data_sanity import DataSanityChecker
 from ..exceptions import TypeInconsistencyError, TypeInconsistencyLocation
-from ..models.appconfig import GraphModel, Node
+from ..models.appconfig import (
+    GraphModel,
+    Node,
+    SheetConnection,
+    SheetModel,
+    SheetReferences,
+)
 from ..models.error_model import GraphValidationError, GraphValidationResult
 from ..services.config_service import ConfigService
 from ..services.db_service import Database
@@ -84,12 +90,11 @@ class SpreadsheetService:
             """
             self.path = path
             self.batch_id = str(uuid.uuid4())
-            self.primary_key: Optional[str] = None
 
             # Initialize sheets
             self.sheets = self._load_excel_sheets()
-            # Clean data
             self._clean_sheet_data()
+            self.validate_data_types()
 
         def _load_excel_sheets(self) -> Dict[str, pd.DataFrame]:
             """Load all sheets from Excel file into memory.
@@ -120,28 +125,12 @@ class SpreadsheetService:
                             lambda x: x.strip() if isinstance(x, str) else x
                         )
 
-        @staticmethod
-        def sanitize_label(label: str) -> str:
-            """Sanitize a string to be used as a Neo4j node label."""
-            return label.replace(" ", "_").replace("-", "_")
-
-        def read_sheet_names(self) -> List[str]:
-            """Get a list of sheet names from the Excel file."""
-            return [str(name) for name in pd.ExcelFile(self.path).sheet_names]
-
-        def read_sheet(self, sheet_name: str) -> pd.DataFrame:
-            """Get a sheet from the cached sheets dictionary."""
-            if sheet_name not in self.sheets:
-                raise ValueError(f"Sheet '{sheet_name}' not found in Excel file")
-            return self.sheets[sheet_name]
-
-        def validate_data_types(self) -> None:
+        def validate_data(self) -> None:
             """Validates data types across all sheets and raises a TypeInconsistencyError if needed."""
             all_inconsistencies = []
-            for sheet_name in self.read_sheet_names():
-                df = self.read_sheet(sheet_name)
+            for sheet_name, df in self.sheets.items():
                 checker = DataSanityChecker(
-                    df=df, sheet_name=sheet_name, path=self.path, primary_key=None
+                    df=df, sheet_name=sheet_name, path=self.path
                 )
                 inconsistencies = checker.get_all_inconsistencies()
                 all_inconsistencies.extend(
@@ -162,11 +151,7 @@ class SpreadsheetService:
         def build_graph_model(self) -> GraphModel:
             """Builds the graph model. Should only be called after validation passes."""
             nodes = []
-            for sheet_name in self.read_sheet_names():
-                df = self.read_sheet(sheet_name)
-                checker = DataSanityChecker(
-                    df=df, sheet_name=sheet_name, path=self.path, primary_key=None
-                )
+            for sheet_name, df in self.sheets.items():
                 node = Node(name=sheet_name)
 
                 for column in df.columns:
@@ -179,11 +164,8 @@ class SpreadsheetService:
                 nodes=nodes,
             )
 
-        def _validate_sheet_connection(
-            self, connection: SheetConnection, sheet_model: SheetModel
-        ) -> None:
+        def _validate_sheet_connection(self, sheet_model: SheetModel) -> None:
             """Validate a single sheet connection."""
-            logger.debug(f"Connection: {connection}")
 
             source_sheet = next(
                 (

@@ -36,12 +36,33 @@
 
 ### SheetModel
 
+- sheets
+    - Type: Sheet[]
+    - Description: A list of sheets in the database
 - sheet_connections
     - Type: SheetConnection[]
     - Description: A list of connections between sheets
 - sheet_references
     - Type: SheetReferences[]
     - Description: A list of references between sheets
+
+### Sheet
+
+- name
+    - Type: string
+    - Description: The name of the sheet
+- columns
+    - Type: Column[]
+    - Description: A list of columns in the sheet
+
+### Column
+
+- name
+    - Type: string
+    - Description: The name of the column
+- data_type
+    - Type: string
+    - Description: The data type of the column
 
 ### SheetConnection
 

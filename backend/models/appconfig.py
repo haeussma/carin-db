@@ -340,6 +340,7 @@ class SheetModel(BaseModel):
         validate_assignment = True,
     ) # type: ignore
 
+    sheets: list[Sheet] = Field(default_factory=list)
     sheet_connections: list[SheetConnection] = Field(default_factory=list)
     sheet_references: list[SheetReferences] = Field(default_factory=list)
 
@@ -360,6 +361,18 @@ class SheetModel(BaseModel):
             "md": "http://mdmodel.net/",
         }
     )
+
+    def filter_sheets(self, **kwargs) -> list[Sheet]:
+        """Filters the sheets attribute based on the given kwargs
+
+        Args:
+            **kwargs: The attributes to filter by.
+
+        Returns:
+            list[Sheet]: The filtered list of Sheet objects
+        """
+
+        return FilterWrapper[Sheet](self.sheets, **kwargs).filter()
 
     def filter_sheet_connections(self, **kwargs) -> list[SheetConnection]:
         """Filters the sheet_connections attribute based on the given kwargs
@@ -453,6 +466,27 @@ class SheetModel(BaseModel):
         self.ld_type.append(term)
 
 
+    def add_to_sheets(
+        self,
+        name: Optional[str]= None,
+        columns: list[Column]= [],
+        **kwargs,
+    ):
+        params = {
+            "name": name,
+            "columns": columns
+        }
+
+        if "id" in kwargs:
+            params["id"] = kwargs["id"]
+
+        self.sheets.append(
+            Sheet(**params)
+        )
+
+        return self.sheets[-1]
+
+
     def add_to_sheet_connections(
         self,
         source_sheet_name: Optional[str]= None,
@@ -501,6 +535,228 @@ class SheetModel(BaseModel):
         )
 
         return self.sheet_references[-1]
+
+class Sheet(BaseModel):
+
+    model_config: ConfigDict = ConfigDict( # type: ignore
+        validate_assignment = True,
+    ) # type: ignore
+
+    name: Optional[Optional[str]] = Field(default=None)
+    columns: list[Column] = Field(default_factory=list)
+
+    # JSON-LD fields
+    ld_id: str = Field(
+        serialization_alias="@id",
+        default_factory=lambda: "md:Sheet/" + str(uuid4())
+    )
+    ld_type: list[str] = Field(
+        serialization_alias="@type",
+        default_factory = lambda: [
+            "md:Sheet",
+        ],
+    )
+    ld_context: dict[str, str | dict] = Field(
+        serialization_alias="@context",
+        default_factory = lambda: {
+            "md": "http://mdmodel.net/",
+        }
+    )
+
+    def filter_columns(self, **kwargs) -> list[Column]:
+        """Filters the columns attribute based on the given kwargs
+
+        Args:
+            **kwargs: The attributes to filter by.
+
+        Returns:
+            list[Column]: The filtered list of Column objects
+        """
+
+        return FilterWrapper[Column](self.columns, **kwargs).filter()
+
+
+    def set_attr_term(
+        self,
+        attr: str,
+        term: str | dict,
+        prefix: str | None = None,
+        iri: str | None = None
+    ):
+        """Sets the term for a given attribute in the JSON-LD object
+
+        Example:
+            # Using an IRI term
+            >> obj.set_attr_term("name", "http://schema.org/givenName")
+
+            # Using a prefix and term
+            >> obj.set_attr_term("name", "schema:givenName", "schema", "http://schema.org")
+
+            # Usinng a dictionary term
+            >> obj.set_attr_term("name", {"@id": "http://schema.org/givenName", "@type": "@id"})
+
+        Args:
+            attr (str): The attribute to set the term for
+            term (str | dict): The term to set for the attribute
+
+        Raises:
+            AssertionError: If the attribute is not found in the model
+        """
+
+        assert attr in self.model_fields, f"Attribute {attr} not found in {self.__class__.__name__}"
+
+        if prefix:
+            validate_prefix(term, prefix)
+
+        add_namespace(self, prefix, iri)
+        self.ld_context[attr] = term
+
+    def add_type_term(
+        self,
+        term: str,
+        prefix: str | None = None,
+        iri: str | None = None
+    ):
+        """Adds a term to the @type field of the JSON-LD object
+
+        Example:
+            # Using a term
+            >> obj.add_type_term("https://schema.org/Person")
+
+            # Using a prefixed term
+            >> obj.add_type_term("schema:Person", "schema", "https://schema.org/Person")
+
+        Args:
+            term (str): The term to add to the @type field
+            prefix (str, optional): The prefix to use for the term. Defaults to None.
+            iri (str, optional): The IRI to use for the term prefix. Defaults to None.
+
+        Raises:
+            ValueError: If prefix is provided but iri is not
+            ValueError: If iri is provided but prefix is not
+        """
+
+        if prefix:
+            validate_prefix(term, prefix)
+
+        add_namespace(self, prefix, iri)
+        self.ld_type.append(term)
+
+
+    def add_to_columns(
+        self,
+        name: Optional[str]= None,
+        data_type: Optional[str]= None,
+        **kwargs,
+    ):
+        params = {
+            "name": name,
+            "data_type": data_type
+        }
+
+        if "id" in kwargs:
+            params["id"] = kwargs["id"]
+
+        self.columns.append(
+            Column(**params)
+        )
+
+        return self.columns[-1]
+
+class Column(BaseModel):
+
+    model_config: ConfigDict = ConfigDict( # type: ignore
+        validate_assignment = True,
+    ) # type: ignore
+
+    name: Optional[Optional[str]] = Field(default=None)
+    data_type: Optional[Optional[str]] = Field(default=None)
+
+    # JSON-LD fields
+    ld_id: str = Field(
+        serialization_alias="@id",
+        default_factory=lambda: "md:Column/" + str(uuid4())
+    )
+    ld_type: list[str] = Field(
+        serialization_alias="@type",
+        default_factory = lambda: [
+            "md:Column",
+        ],
+    )
+    ld_context: dict[str, str | dict] = Field(
+        serialization_alias="@context",
+        default_factory = lambda: {
+            "md": "http://mdmodel.net/",
+        }
+    )
+
+
+    def set_attr_term(
+        self,
+        attr: str,
+        term: str | dict,
+        prefix: str | None = None,
+        iri: str | None = None
+    ):
+        """Sets the term for a given attribute in the JSON-LD object
+
+        Example:
+            # Using an IRI term
+            >> obj.set_attr_term("name", "http://schema.org/givenName")
+
+            # Using a prefix and term
+            >> obj.set_attr_term("name", "schema:givenName", "schema", "http://schema.org")
+
+            # Usinng a dictionary term
+            >> obj.set_attr_term("name", {"@id": "http://schema.org/givenName", "@type": "@id"})
+
+        Args:
+            attr (str): The attribute to set the term for
+            term (str | dict): The term to set for the attribute
+
+        Raises:
+            AssertionError: If the attribute is not found in the model
+        """
+
+        assert attr in self.model_fields, f"Attribute {attr} not found in {self.__class__.__name__}"
+
+        if prefix:
+            validate_prefix(term, prefix)
+
+        add_namespace(self, prefix, iri)
+        self.ld_context[attr] = term
+
+    def add_type_term(
+        self,
+        term: str,
+        prefix: str | None = None,
+        iri: str | None = None
+    ):
+        """Adds a term to the @type field of the JSON-LD object
+
+        Example:
+            # Using a term
+            >> obj.add_type_term("https://schema.org/Person")
+
+            # Using a prefixed term
+            >> obj.add_type_term("schema:Person", "schema", "https://schema.org/Person")
+
+        Args:
+            term (str): The term to add to the @type field
+            prefix (str, optional): The prefix to use for the term. Defaults to None.
+            iri (str, optional): The IRI to use for the term prefix. Defaults to None.
+
+        Raises:
+            ValueError: If prefix is provided but iri is not
+            ValueError: If iri is provided but prefix is not
+        """
+
+        if prefix:
+            validate_prefix(term, prefix)
+
+        add_namespace(self, prefix, iri)
+        self.ld_type.append(term)
+
 
 class SheetConnection(BaseModel):
 
@@ -1181,6 +1437,8 @@ for cls in [
     AppConfig,
     DatabaseInfo,
     SheetModel,
+    Sheet,
+    Column,
     SheetConnection,
     SheetReferences,
     GraphModel,

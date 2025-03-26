@@ -3,11 +3,6 @@ from typing import List
 
 import pandas as pd
 
-from .exceptions import (
-    PrimaryKeyNotFoundInRowError,
-    PrimaryKeyNotUniqueError,
-)
-
 
 @dataclass
 class TypeInconsistency:
@@ -24,21 +19,11 @@ class DataSanityChecker:
         df: pd.DataFrame,
         sheet_name: str,
         path: str,
-        primary_key: str | None,
     ):
         self.df = df
         self.sheet_name = sheet_name
         self.path = path
-        self.primary_key = primary_key
         self.inconsistencies: List[TypeInconsistency] = []
-
-    def detect_column_types(self, column: str) -> set[str]:
-        """
-        Detects the unique data types in a column, ignoring empty cells.
-        Returns a set of type names found in the column.
-        """
-        non_empty_values = self.df[column][pd.notna(self.df[column])]
-        return set(non_empty_values.apply(lambda x: type(x).__name__).unique())
 
     def check_column_type_consistency(self, column: str) -> bool:
         """
@@ -46,16 +31,20 @@ class DataSanityChecker:
         Returns True if types are consistent, False otherwise.
         Also records any inconsistencies found.
         """
-        data_types = self.detect_column_types(column)
+        # Get non-empty values and their types
+        non_empty_values = self.df[column][pd.notna(self.df[column])]
+        data_types = set(non_empty_values.apply(lambda x: type(x).__name__).unique())
+
+        # Define allowed type groups
         numeric_types = {"int", "float"}
 
-        # Check if we have both numeric and non-numeric types
+        # Check for type inconsistencies
         has_numeric = any(t in numeric_types for t in data_types)
-        has_non_numeric = any(t not in numeric_types for t in data_types)
+        non_numeric_types = {t for t in data_types if t not in numeric_types}
 
-        if has_numeric and has_non_numeric:
+        # Case 1: Mixing numeric with non-numeric types
+        if has_numeric and non_numeric_types:
             # Find rows with non-numeric types
-            non_empty_values = self.df[column][pd.notna(self.df[column])]
             inconsistent_rows = non_empty_values[
                 ~non_empty_values.apply(lambda x: type(x).__name__ in numeric_types)
             ].index.tolist()
@@ -71,6 +60,27 @@ class DataSanityChecker:
                 )
             )
             return False
+
+        # Case 2: Mixing different non-numeric types
+        if len(non_numeric_types) > 1:
+            # Find rows with types different from the first non-numeric type
+            first_type = next(iter(non_numeric_types))
+            inconsistent_rows = non_empty_values[
+                ~non_empty_values.apply(lambda x: type(x).__name__ == first_type)
+            ].index.tolist()
+            inconsistent_rows = [row + 2 for row in inconsistent_rows]
+
+            self.inconsistencies.append(
+                TypeInconsistency(
+                    column=column,
+                    sheet_name=self.sheet_name,
+                    data_types=list(data_types),
+                    rows=inconsistent_rows,
+                    path=self.path,
+                )
+            )
+            return False
+
         return True
 
     def get_column_type(self, column: str) -> str:
@@ -79,7 +89,8 @@ class DataSanityChecker:
         For numeric columns (int/float), always returns 'float'.
         For other columns, returns the first non-numeric type found or falls back to 'str'.
         """
-        data_types = self.detect_column_types(column)
+        non_empty_values = self.df[column][pd.notna(self.df[column])]
+        data_types = set(non_empty_values.apply(lambda x: type(x).__name__).unique())
         numeric_types = {"int", "float"}
 
         # If we have any numeric types, treat as float
@@ -88,27 +99,6 @@ class DataSanityChecker:
 
         # Otherwise return first type found or fallback to str
         return next(iter(data_types)) if data_types else "str"
-
-    def check_primary_key_values_exist_in_all_rows(self):
-        """Checks if in all rows of the primary key column there is a value"""
-        if not self.df[self.primary_key].notna().all():
-            missing_rows = self.df[self.df[self.primary_key].isna()].index.tolist()
-            missing_rows = [row + 2 for row in missing_rows]
-            raise PrimaryKeyNotFoundInRowError(
-                self.primary_key, self.sheet_name, missing_rows, self.path
-            )
-
-    def check_primary_key_values_unique(self):
-        """Checks if the primary key column has unique values.
-        If not raises error giving the rows where the duplicates are found"""
-        if not self.df[self.primary_key].is_unique:
-            duplicate_rows = self.df[
-                self.df[self.primary_key].duplicated(keep=False)
-            ].index.tolist()
-            duplicate_rows = [row + 2 for row in duplicate_rows]
-            raise PrimaryKeyNotUniqueError(
-                self.primary_key, self.sheet_name, duplicate_rows, self.path
-            )
 
     def eliminate_space_in_column_names(self):
         """Replace all spaces in column names with underscores"""
@@ -124,3 +114,10 @@ class DataSanityChecker:
             self.check_column_type_consistency(column)
 
         return self.inconsistencies
+
+
+if __name__ == "__main__":
+    df = pd.read_excel("test_data/genoscope/test.xlsx", sheet_name="reaction")
+    checker = DataSanityChecker(df, "reaction", "test_data/genoscope/test.xlsx")
+    print(checker.check_column_type_consistency("success"))
+    print(checker.inconsistencies)

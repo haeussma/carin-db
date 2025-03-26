@@ -16,3 +16,8 @@ def sanitize_data(data):
             return data
     else:
         return data
+
+
+def sanitize_label(label: str) -> str:
+    """Sanitize a string removing spaces and hyphens."""
+    return label.replace(" ", "_").replace("-", "_")

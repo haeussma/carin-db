@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from .api.routes import base, config, database, spreadsheet
+from .api.routes import config, database, spreadsheet
 from .services.config_service import ConfigService
 
 
@@ -35,7 +35,6 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(base.router, prefix="/api")
 app.include_router(config.router, prefix="/api")
 app.include_router(database.router, prefix="/api")
 app.include_router(spreadsheet.router, prefix="/api")

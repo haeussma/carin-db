@@ -65,17 +65,50 @@ export const DatabaseInfoCodec = D.lazy("DatabaseInfo", () => D.struct({
 
 
 /**
+    * @param sheets - A list of sheets in the database
     * @param sheet_connections - A list of connections between sheets
     * @param sheet_references - A list of references between sheets
 **/
 export interface SheetModel extends JsonLd {
+  sheets?: Sheet[] | null;
   sheet_connections?: SheetConnection[] | null;
   sheet_references?: SheetReferences[] | null;
 }
 
 export const SheetModelCodec = D.lazy("SheetModel", () => D.struct({
+    sheets: D.array(SheetCodec),
     sheet_connections: D.array(SheetConnectionCodec),
     sheet_references: D.array(SheetReferencesCodec),
+}));
+
+
+/**
+    * @param name - The name of the sheet
+    * @param columns - A list of columns in the sheet
+**/
+export interface Sheet extends JsonLd {
+  name?: string | null;
+  columns?: Column[] | null;
+}
+
+export const SheetCodec = D.lazy("Sheet", () => D.struct({
+    name: D.nullable(D.string),
+    columns: D.array(ColumnCodec),
+}));
+
+
+/**
+    * @param name - The name of the column
+    * @param data_type - The data type of the column
+**/
+export interface Column extends JsonLd {
+  name?: string | null;
+  data_type?: string | null;
+}
+
+export const ColumnCodec = D.lazy("Column", () => D.struct({
+    name: D.nullable(D.string),
+    data_type: D.nullable(D.string),
 }));
 
 

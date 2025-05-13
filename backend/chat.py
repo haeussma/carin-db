@@ -7,7 +7,7 @@ from neo4j.exceptions import CypherSyntaxError
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from .services.db_service import Database
+from .services.database_connection import Database
 
 
 class CypherResponse(BaseModel):
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     # define db
     from devtools import pprint
 
-    from backend.services.db_service import Database
+    from backend.services.database_connection import Database
 
     db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
 

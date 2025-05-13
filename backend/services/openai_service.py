@@ -5,7 +5,7 @@ from openai.types.chat.chat_completion import ChatCompletion
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 from pydantic import BaseModel
 
-from .db_service import Database
+from .database_connection import Database
 
 T = TypeVar("T", bound=BaseModel)
 

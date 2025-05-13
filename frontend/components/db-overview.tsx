@@ -58,7 +58,7 @@ export default function DatabaseNodeVisualization() {
         setError(null)
 
         try {
-            const response = await fetch('http://localhost:8000/api/get_node_count')
+            const response = await fetch('http://localhost:8000/api/database/status')
 
             // print data
             console.log(response)

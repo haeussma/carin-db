@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from .sheet_model import Column, Sheet, SheetModel
+from .appconfig import Column, Sheet, SheetModel
 
 
 class SheetConnection(BaseModel):

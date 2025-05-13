@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from loguru import logger
 
 from ...services.config_service import ConfigService
-from ...services.db_service import Database
+from ...services.database_connection import Database
 from ...services.openai_service import OpenAIService
 
 router = APIRouter()

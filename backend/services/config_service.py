@@ -16,10 +16,12 @@ class ConfigService:
     @classmethod
     def get_config_path(cls) -> Path:
         """Get the path to the configuration file."""
-        return (
+        path = (
             Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             / cls.CONFIG_FILE
         )
+        logger.info(f"Config path: {path}")
+        return path
 
     @classmethod
     def load_config(cls) -> AppConfig:
@@ -51,36 +53,46 @@ class ConfigService:
             raise
 
     @classmethod
-    def get_database(cls, name: str) -> Optional[DatabaseInfo]:
-        """Get a database configuration by name."""
+    def get_database(cls) -> DatabaseInfo:
+        """Gets the first database configuration.
+
+        Returns:
+            The database configuration
+
+        Raises:
+            ValueError: If the database with the given URI doesn't exist
+        """
         config = cls.load_config()
-        return next((db for db in config.databases if db.name == name), None)
+        db = next((db for db in config.databases), None)
+        if db is None:
+            raise ValueError("No database configured")
+        return db
 
     @classmethod
     def add_database(cls, database: DatabaseInfo) -> None:
         """Add a new database configuration."""
         config = cls.load_config()
-        # Remove existing database with same name if exists
-        config.databases = [db for db in config.databases if db.name != database.name]
+        # Remove existing database with same URI if exists
+        config.databases = [db for db in config.databases if db.uri != database.uri]
         config.databases.append(database)
         cls.save_config(config)
 
     @classmethod
-    def update_database(cls, name: str, database: DatabaseInfo) -> None:
+    def update_database(cls, uri: str, database: DatabaseInfo) -> None:
         """Update an existing database configuration."""
         config = cls.load_config()
         for i, db in enumerate(config.databases):
-            if db.name == name:
+            if db.uri == uri:
                 config.databases[i] = database
                 cls.save_config(config)
                 return
-        raise ValueError(f"Database {name} not found")
+        raise ValueError(f"Database with URI {uri} not found")
 
     @classmethod
-    def delete_database(cls, name: str) -> None:
+    def delete_database(cls, uri: str) -> None:
         """Delete a database configuration."""
         config = cls.load_config()
-        config.databases = [db for db in config.databases if db.name != name]
+        config.databases = [db for db in config.databases if db.uri != uri]
         cls.save_config(config)
 
     @classmethod
@@ -104,12 +116,12 @@ class ConfigService:
         cls.save_config(config)
 
     @classmethod
-    def get_db_by_name(cls, name: str) -> DatabaseInfo:
-        """Get a database configuration by name."""
+    def get_db_by_uri(cls, uri: str) -> DatabaseInfo:
+        """Get a database configuration by URI."""
         config = cls.load_config()
-        db = next((db for db in config.databases if db.name == name), None)
+        db = next((db for db in config.databases if db.uri == uri), None)
         if db is None:
-            raise ValueError(f"Database {name} not found")
+            raise ValueError(f"Database with URI {uri} not found")
         return db
 
     @classmethod
@@ -120,3 +132,31 @@ class ConfigService:
         if openai_api_key is None:
             raise ValueError("OpenAI API key is not set")
         return openai_api_key
+
+    @classmethod
+    def get_first_database(cls) -> DatabaseInfo:
+        """Get the first database configuration.
+
+        Returns:
+            The first database configuration
+
+        Raises:
+            ValueError: If no database is configured
+        """
+        config = cls.load_config()
+        if not config.databases:
+            raise ValueError("No database configured")
+        return config.databases[0]
+
+    @classmethod
+    def update_first_database(cls, database: DatabaseInfo) -> None:
+        """Update the first database configuration.
+
+        If no database exists, it will be added.
+        """
+        config = cls.load_config()
+        if not config.databases:
+            config.databases.append(database)
+        else:
+            config.databases[0] = database
+        cls.save_config(config)

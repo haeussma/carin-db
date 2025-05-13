@@ -23,6 +23,7 @@
     "@tanstack/react-table": "^8.20.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "fp-ts": "^2.16.9",
     "io-ts": "^2.2.22",
     "lucide-react": "^0.460.0",
     "next": "^15.1.3",

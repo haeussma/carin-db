@@ -28,6 +28,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     const [apiSaved, setApiSaved] = useState(false)
 
     // Database state
+    const [dbName, setDbName] = useState('')
     const [dbUrl, setDbUrl] = useState('')
     const [dbUsername, setDbUsername] = useState('')
     const [dbPassword, setDbPassword] = useState('')
@@ -36,11 +37,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
     // Load API info via endpoint
     useEffect(() => {
-        fetch('http://localhost:8000/api/get_openai_key')
+        fetch('http://localhost:8000/api/config/openai')
             .then(res => res.json())
             .then(data => {
-                if (data.api_key) {
-                    setApiKey(data.api_key)
+                if (data.openai_api_key) {
+                    setApiKey(data.openai_api_key)
                 }
             })
             .catch(err => {
@@ -50,10 +51,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
     // Load database settings via endpoint
     useEffect(() => {
-        fetch('http://localhost:8000/api/get_db_settings')
+        fetch('http://localhost:8000/api/config/database')
             .then(res => res.json())
             .then(data => {
                 if (!data.error) {
+                    setDbName(data.name)
                     setDbUrl(data.url)
                     setDbUsername(data.username)
                     // Display password as asterisks if it exists
@@ -126,16 +128,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             return
         }
 
+        if (!dbName) {
+            setDbError('Database name is required')
+            return
+        }
+
         setDbError(null)
         setDbSaved(false)
 
         try {
-            const response = await fetch('http://localhost:8000/api/save_db_settings', {
+            const response = await fetch('http://localhost:8000/api/config/database', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    name: dbName,
                     url: dbUrl,
                     username: dbUsername,
                     password: dbPassword === '*'.repeat(dbPassword.length) ? null : dbPassword
@@ -235,6 +243,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
                     <TabsContent value="database" className="space-y-4 mt-4">
                         <div className="space-y-2">
+                            <Label htmlFor="db-name">Name</Label>
+                            <Input
+                                id="db-name"
+                                value={dbName}
+                                onChange={(e) => {
+                                    setDbName(e.target.value)
+                                    setDbError(null)
+                                }}
+                                placeholder="default"
+                            />
                             <Label htmlFor="db-url">URL</Label>
                             <Input
                                 id="db-url"
@@ -269,7 +287,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                             <Button
                                 onClick={handleSaveDbSettings}
                                 className={`flex-1 ${dbSaved ? "bg-green-500 hover:bg-green-600" : ""}`}
-                                disabled={!dbUrl}
+                                disabled={!dbUrl || !dbName}
                             >
                                 {dbSaved ? 'Saved!' : 'Save DB Settings'}
                             </Button>

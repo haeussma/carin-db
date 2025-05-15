@@ -11,13 +11,13 @@ import { SheetConnections } from "@/components/SheetConnections"
 import { References } from "@/components/References"
 import InteractiveGraphVisualization from "@/components/InteractiveGraphVisualization"
 import {
-  Column,
-  Sheet,
   SheetModel,
   SheetConnection,
   SheetReferences,
   validate
 } from "@/components/appconfig"
+
+const CONNECTION_ERROR = "Connection to server failed. Please check that the backend server is running at http://localhost:8000 and try again."
 
 interface SheetReference {
   source_sheet_name: string;
@@ -72,7 +72,7 @@ export default function SpreadsheetUploader() {
   const loadGraphModel = useCallback(async () => {
     setIsLoadingModel(true);
     try {
-      const response = await fetch("http://localhost:8000/api/spreadsheet/model");
+      const response = await fetch("http://localhost:8000/api/config/sheet_model");
 
       // If we get a 404 or other error, it's fine for first-time uploads
       // Just log it and continue with empty model
@@ -86,24 +86,24 @@ export default function SpreadsheetUploader() {
       console.log("Loaded graph model:", data);
 
       // If we have data, update the state
-      if (data && data.model && Object.keys(data.model).length > 0) {
+      if (data && Object.keys(data).length > 0) {
         try {
           // Set sheet connections if available
-          if (data.model.sheet_connections && Array.isArray(data.model.sheet_connections) && data.model.sheet_connections.length > 0) {
+          if (data.sheet_connections && Array.isArray(data.sheet_connections) && data.sheet_connections.length > 0) {
             // Extract primary key from the first connection's key field
-            const firstConnection = data.model.sheet_connections[0];
+            const firstConnection = data.sheet_connections[0];
             if (firstConnection && firstConnection.key) {
               const primaryKeyValue = String(firstConnection.key);
               console.log("Setting primary key from connection:", primaryKeyValue);
               setPrimaryKey(primaryKeyValue);
             }
 
-            setSheetConnections(data.model.sheet_connections);
+            setSheetConnections(data.sheet_connections);
           }
 
           // Set sheet references if available
-          if (data.model.sheet_references && Array.isArray(data.model.sheet_references)) {
-            setSheetReferences(data.model.sheet_references);
+          if (data.sheet_references && Array.isArray(data.sheet_references)) {
+            setSheetReferences(data.sheet_references);
           }
         } catch (parseError) {
           console.error("Error parsing model data:", parseError);
@@ -149,57 +149,61 @@ export default function SpreadsheetUploader() {
     formData.append("file", droppedFile)
 
     try {
-      const response = await fetch("http://localhost:8000/api/spreadsheet/upload", {
+      const uploadRes = await fetch("http://localhost:8000/api/spreadsheet/upload", {
         method: "POST",
         body: formData,
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || "Upload failed")
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json()
+        throw new Error(errorData.detail?.message || "Upload failed")
       }
 
-      const data = await response.json()
+      const file_path = await uploadRes.text();
+      console.log("File path is here:", file_path);
 
-      try {
-        // The API now returns sheets directly instead of a model
-        if (data.sheets && Array.isArray(data.sheets)) {
-          // Create a sheet model from the sheets
-          const validatedModel: SheetModel = {
-            sheets: data.sheets,
-            sheet_connections: [],
-            sheet_references: []
-          };
+      const validateRes = await fetch(
+        `http://localhost:8000/api/spreadsheet/validate_spreadsheet?path=${encodeURIComponent(file_path)}`,
+        { method: "POST" }
+      );
 
-          setSheetModel(validatedModel)
-          setFilePath(data.file_path)
+      const data = await validateRes.json();
+      console.log("Data is here:", data);
 
-          // After loading sheet model, try to load graph model to prefill connections
-          await loadGraphModel();
-        } else {
-          throw new Error("Invalid response format: missing sheets data")
+      if (!validateRes.ok) {
+        if (validateRes.status === 400 && data.type_inconsistencies) {
+          const errorMessages = data.type_inconsistencies.map((inc: any) =>
+            `Sheet "${inc.sheet_name}", Column "${inc.column}": Found mixed data types ${inc.data_types.join(', ')} in rows ${inc.rows.join(', ')}`
+          );
+          setStatusMessage(`Data type inconsistencies found:\n${errorMessages.join('\n')}`);
+          setStatusColor("red");
+          throw new Error("Data type inconsistencies found in spreadsheet");
         }
-      } catch (validationError: any) {
-        console.error("Model validation error:", validationError);
-        setStatusMessage(`Invalid sheet model format: ${validationError.message}`)
-        setStatusColor("red")
+        throw new Error(data.detail?.message || "Validation failed");
       }
-    } catch (error: any) {
-      console.error("Error adding spreadsheet:", error)
 
-      // Handle network errors specifically
-      if (error.message === "Failed to fetch") {
-        setStatusMessage(
-          "Connection to server failed. Please check that the backend server is running at http://localhost:8000 and try again."
-        )
-      } else {
-        setStatusMessage(`Failed to upload spreadsheet: ${error.message}`)
+      // Check if we have sheets data
+      if (!data.sheets || !Array.isArray(data.sheets)) {
+        throw new Error("Invalid response: missing sheets data");
       }
-      setStatusColor("red")
+
+      const validatedModel: SheetModel = {
+        sheets: data.sheets,
+        sheet_connections: sheetConnections,
+        sheet_references: sheetReferences
+      };
+
+      setSheetModel(validatedModel);
+      setFilePath(file_path);
+
+    } catch (error: any) {
+      console.error("Error processing spreadsheet:", error);
+      setStatusMessage(error.message || "Failed to process spreadsheet");
+      setStatusColor("red");
     } finally {
-      setIsUploading(false)
+      setIsUploading(false);
     }
-  }, [loadGraphModel])
+  }, [sheetConnections, sheetReferences]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -212,16 +216,15 @@ export default function SpreadsheetUploader() {
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!file || !filePath || !areConnectionsValid()) return
+    e.preventDefault();
+    if (!file || !filePath || !areConnectionsValid()) return;
 
-    setIsUploading(true)
-    setStatusMessage("")
-    setStatusColor("")
-    setHasSubmitted(true)
+    setIsUploading(true);
+    setStatusMessage("");
+    setStatusColor("");
+    setHasSubmitted(true);
 
     try {
-      // Update all sheet connections to use the primary key if needed
       const connectionsWithKey = primaryKey
         ? sheetConnections.map(conn => ({
           ...conn,
@@ -229,102 +232,68 @@ export default function SpreadsheetUploader() {
         }))
         : sheetConnections;
 
-      // Create fully typed graph model data
       const graphModelData: SheetModel = {
         sheets: sheetModel.sheets,
         sheet_connections: connectionsWithKey,
         sheet_references: sheetReferences,
       };
 
-      console.log("Processing with graph model data:", graphModelData);
+      // First save the sheet model
+      const saveModelRes = await fetch("http://localhost:8000/api/config/sheet_model", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(graphModelData),
+      });
 
-      const formData = new FormData()
-      formData.append("file_path", filePath)
-      formData.append("sheet_model", JSON.stringify(graphModelData))
+      if (!saveModelRes.ok) {
+        const errorData = await saveModelRes.json();
+        throw new Error(errorData.detail?.message || "Failed to save sheet model");
+      }
 
-      try {
-        const response = await fetch("http://localhost:8000/api/spreadsheet/process", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            file_path: filePath,
-            sheet_model: graphModelData
-          }),
-        })
+      // Then process the spreadsheet
+      const processRes = await fetch("http://localhost:8000/api/spreadsheet/process", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          file_path: filePath,
+        }),
+      });
 
-        const result = await response.json()
-        console.log("Result of the response:", result);
-
-        if (!response.ok) {
-          // Format and display the error message
-          let errorMessage = result.message || "Error processing file"
-
-          // Format validation errors for better readability
-          if (errorMessage.includes("Missing Values:") ||
-            errorMessage.includes("Missing Sheets:") ||
-            errorMessage.includes("Missing Columns:")) {
-            errorMessage = errorMessage.replace(/\n/g, "<br/>")
-          }
-
-          setStatusMessage(errorMessage)
-          setStatusColor("red")
-          throw new Error(errorMessage)
-        }
-
-        // Save the graph model for future use
-        try {
-          await fetch("http://localhost:8000/api/spreadsheet/model", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              file_path: filePath,
-              sheet_connections: connectionsWithKey,
-              sheet_references: sheetReferences
-            }),
-          });
-        } catch (saveError) {
-          console.error("Error saving graph model:", saveError);
-          // Don't fail the whole process if saving the model fails
-        }
-
-        // Success
-        setStatusMessage(result.message || "Data successfully added to the knowledgebase!")
-        setStatusColor("green")
-
-        // Reset form
-        setFile(null)
-        setFilePath("")
-        setSheetModel({ sheets: [], sheet_connections: [], sheet_references: [] })
-        setSheetConnections([])
-        setSheetReferences([])
-        setPrimaryKey("")
-      } catch (fetchError: any) {
-        console.error("Fetch error:", fetchError)
-
-        // Handle network errors specifically
-        if (fetchError.message === "Failed to fetch") {
-          setStatusMessage(
-            "Connection to server failed. Please check that the backend server is running at http://localhost:8000 and try again."
-          )
+      if (!processRes.ok) {
+        const errorData = await processRes.json();
+        if (processRes.status === 404) {
+          throw new Error("File not found. Please try uploading the file again.");
+        } else if (processRes.status === 400) {
+          throw new Error(errorData.detail?.message || "Invalid request. Please check your input.");
         } else {
-          setStatusMessage(fetchError.message || "An unexpected error occurred")
+          throw new Error(errorData.detail?.message || "Failed to process spreadsheet");
         }
-        setStatusColor("red")
       }
+
+      const result = await processRes.json();
+      setStatusMessage(result.message || "Data successfully added to the knowledgebase!");
+      setStatusColor("green");
+
+      // Reset form on success
+      setFile(null);
+      setFilePath("");
+      setSheetModel({ sheets: [], sheet_connections: [], sheet_references: [] });
+      setSheetConnections([]);
+      setSheetReferences([]);
+      setPrimaryKey("");
+
     } catch (error: any) {
-      console.error("Error processing data:", error)
-      if (!statusMessage) {
-        setStatusMessage(error.message || "An unexpected error occurred")
-        setStatusColor("red")
-      }
+      console.error("Error processing data:", error);
+      setStatusMessage(error.message || "An unexpected error occurred");
+      setStatusColor("red");
     } finally {
-      setIsUploading(false)
+      setIsUploading(false);
     }
-  }
+  };
 
   return (
     <div className="w-full">
@@ -350,11 +319,6 @@ export default function SpreadsheetUploader() {
                 <div>
                   <Upload className="w-8 h-8 mx-auto text-gray-400" />
                   <p className="mt-2">Drag &amp; drop a spreadsheet (.xlsx) here, or click to select one</p>
-                </div>
-              )}
-              {isLoadingModel && (
-                <div className="mt-2 text-xs text-blue-600">
-                  Loading saved connections...
                 </div>
               )}
             </div>
@@ -439,4 +403,5 @@ export default function SpreadsheetUploader() {
     </div>
   )
 }
+
 

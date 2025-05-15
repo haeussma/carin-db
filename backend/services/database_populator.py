@@ -5,6 +5,7 @@ import pandas as pd
 from loguru import logger
 
 from ..models.appconfig import (
+    SheetConnection,
     SheetModel,
     SheetReferences,
 )
@@ -15,15 +16,13 @@ from .database_connection import Database
 class DatabasePopulator:
     """Service for extracting data from spreadsheets to a Neo4j database."""
 
-    def __init__(self, sheets: Dict[str, pd.DataFrame], path: str):
+    def __init__(self, sheets: Dict[str, pd.DataFrame]):
         """Initialize the DatabaseExtractor.
 
         Args:
             sheets: Dictionary mapping sheet names to DataFrames
-            path: Path to the Excel file
         """
         self.sheets = sheets
-        self.path = path
         self.batch_id = str(uuid.uuid4())
 
     def _parse_source_values(self, values: pd.Series) -> List[List[str]]:
@@ -37,74 +36,74 @@ class DatabasePopulator:
             result.append(cleaned_values)
         return result
 
-    # def _validate_sheet_connections(
-    #     self, sheet_model: SheetModel, connections: List[SheetConnection]
-    # ) -> GraphValidationResult:
-    #     """Validate all sheet connections and collect any validation errors."""
-    #     validation = GraphValidationResult(
-    #         missing_sheets=[], missing_columns=[], missing_values=[]
-    #     )
+    def _validate_sheet_connections(
+        self, sheet_model: SheetModel, connections: List[SheetConnection]
+    ) -> GraphValidationResult:
+        """Validate all sheet connections and collect any validation errors."""
+        validation = GraphValidationResult(
+            missing_sheets=[], missing_columns=[], missing_values=[]
+        )
 
-    #     for connection in connections:
-    #         # Check source sheet
-    #         source_sheet = next(
-    #             (
-    #                 sheet
-    #                 for sheet in sheet_model.sheets
-    #                 if sheet.name == connection.source_sheet_name
-    #             ),
-    #             None,
-    #         )
-    #         if source_sheet is None:
-    #             validation.missing_sheets.append(
-    #                 GraphValidationError(
-    #                     error_type="missing_sheet",
-    #                     sheet_name=connection.source_sheet_name,
-    #                     message=f"Sheet '{connection.source_sheet_name}' not found",
-    #                 )
-    #             )
-    #             continue
+        for connection in connections:
+            # Check source sheet
+            source_sheet = next(
+                (
+                    sheet
+                    for sheet in sheet_model.sheets
+                    if sheet.name == connection.source_sheet_name
+                ),
+                None,
+            )
+            if source_sheet is None:
+                validation.missing_sheets.append(
+                    GraphValidationError(
+                        error_type="missing_sheet",
+                        sheet_name=connection.source_sheet_name,
+                        message=f"Sheet '{connection.source_sheet_name}' not found",
+                    )
+                )
+                continue
 
-    #         # Check target sheet
-    #         target_sheet = next(
-    #             (
-    #                 sheet
-    #                 for sheet in sheet_model.sheets
-    #                 if sheet.name == connection.target_sheet_name
-    #             ),
-    #             None,
-    #         )
-    #         if target_sheet is None:
-    #             validation.missing_sheets.append(
-    #                 GraphValidationError(
-    #                     error_type="missing_sheet",
-    #                     sheet_name=connection.target_sheet_name,
-    #                     message=f"Sheet '{connection.target_sheet_name}' not found",
-    #                 )
-    #             )
-    #             continue
+            # Check target sheet
+            target_sheet = next(
+                (
+                    sheet
+                    for sheet in sheet_model.sheets
+                    if sheet.name == connection.target_sheet_name
+                ),
+                None,
+            )
+            if target_sheet is None:
+                validation.missing_sheets.append(
+                    GraphValidationError(
+                        error_type="missing_sheet",
+                        sheet_name=connection.target_sheet_name,
+                        message=f"Sheet '{connection.target_sheet_name}' not found",
+                    )
+                )
+                continue
 
-    #         # Check key in source sheet
-    #         if connection.key not in [col.name for col in source_sheet.columns]:
-    #             validation.missing_columns.append(
-    #                 GraphValidationError(
-    #                     error_type="missing_key",
-    #                     sheet_name=connection.source_sheet_name,
-    #                     message=f"Key '{connection.key}' not found in sheet '{connection.source_sheet_name}'",
-    #                 )
-    #             )
+            # Check key in source sheet
+            if connection.key not in [col.name for col in source_sheet.columns]:
+                validation.missing_columns.append(
+                    GraphValidationError(
+                        error_type="missing_key",
+                        sheet_name=connection.source_sheet_name,
+                        message=f"Key '{connection.key}' not found in sheet '{connection.source_sheet_name}'",
+                    )
+                )
 
-    #         # Check key in target sheet
-    #         if connection.key not in [col.name for col in target_sheet.columns]:
-    #             validation.missing_columns.append(
-    #                 GraphValidationError(
-    #                     error_type="missing_key",
-    #                     sheet_name=connection.target_sheet_name,
-    #                     message=f"Key '{connection.key}' not found in sheet '{connection.target_sheet_name}'",
-    #                 )
-    #             )
+            # Check key in target sheet
+            if connection.key not in [col.name for col in target_sheet.columns]:
+                validation.missing_columns.append(
+                    GraphValidationError(
+                        error_type="missing_key",
+                        sheet_name=connection.target_sheet_name,
+                        message=f"Key '{connection.key}' not found in sheet '{connection.target_sheet_name}'",
+                    )
+                )
 
-    #     return validation
+        return validation
 
     def _validate_sheet_references(
         self, sheet_model: SheetModel, references: List[SheetReferences]
@@ -204,49 +203,49 @@ class DatabasePopulator:
 
         return validation
 
-    # def validate_graph_model(self, graph_model: GraphModel) -> None:
-    #     """Validates that the data in the sheets conforms to the graph model specifications.
+    def validate_graph_model(self, db: Database) -> None:
+        """Validates that the data in the sheets conforms to the graph model specifications.
 
-    #     Args:
-    #         graph_model: The graph model to validate
+        Args:
+            db: The database to validate
 
-    #     Raises:
-    #         ValueError: If validation fails
-    #     """
-    #     # Create a sheet model from the sheets
-    #     sheet_model = SheetModel(
-    #         sheets=[
-    #             Node(
-    #                 name=sheet_name,
-    #                 attributes=[
-    #                     {"name": col, "data_type": "string"} for col in df.columns
-    #                 ],
-    #             )
-    #             for sheet_name, df in self.sheets.items()
-    #         ]
-    #     )
+        Raises:
+            ValueError: If validation fails
+        """
+        # Create a sheet model from the sheets
+        sheet_model = SheetModel(
+            sheets=[
+                Node(
+                    name=sheet_name,
+                    attributes=[
+                        {"name": col, "data_type": "string"} for col in df.columns
+                    ],
+                )
+                for sheet_name, df in self.sheets.items()
+            ]
+        )
 
-    #     # Collect all validation errors
-    #     reference_validation = self._validate_sheet_references(
-    #         sheet_model, graph_model.sheet_references
-    #     )
-    #     connection_validation = self._validate_sheet_connections(
-    #         sheet_model, graph_model.sheet_connections
-    #     )
+        # Collect all validation errors
+        reference_validation = self._validate_sheet_references(
+            sheet_model, graph_model.sheet_references
+        )
+        connection_validation = self._validate_sheet_connections(
+            sheet_model, graph_model.sheet_connections
+        )
 
-    #     # Combine all validation errors
-    #     all_errors = GraphValidationResult(
-    #         missing_sheets=reference_validation.missing_sheets
-    #         + connection_validation.missing_sheets,
-    #         missing_columns=reference_validation.missing_columns
-    #         + connection_validation.missing_columns,
-    #         missing_values=reference_validation.missing_values
-    #         + connection_validation.missing_values,
-    #     )
+        # Combine all validation errors
+        all_errors = GraphValidationResult(
+            missing_sheets=reference_validation.missing_sheets
+            + connection_validation.missing_sheets,
+            missing_columns=reference_validation.missing_columns
+            + connection_validation.missing_columns,
+            missing_values=reference_validation.missing_values
+            + connection_validation.missing_values,
+        )
 
-    #     # Raise formatted error if any validation failed
-    #     if all_errors.has_errors():
-    #         raise ValueError(all_errors.format_error_message())
+        # Raise formatted error if any validation failed
+        if all_errors.has_errors():
+            raise ValueError(all_errors.format_error_message())
 
     def extract_to_db(self, db: Database, sheet_model: SheetModel) -> None:
         """Extracts the validated data and creates the corresponding graph structure in Neo4j.
@@ -300,6 +299,7 @@ class DatabasePopulator:
 
             # --- Step 2: Create Relationships for Sheet Connections ---
             for connection in sheet_model.sheet_connections:
+                logger.info(f"Creating relationships for connection: {connection}")
                 source_label = connection.source_sheet_name
                 target_label = connection.target_sheet_name
                 key = connection.key
@@ -329,9 +329,8 @@ class DatabasePopulator:
 
             # --- Step 3: Create Relationships for Sheet References ---
             for reference in sheet_model.sheet_references:
+                logger.info(f"Creating relationships for reference: {reference}")
                 source_df = self.sheets[reference.source_sheet_name]
-                # Use the source sheet's primary key from our mapping.
-                source_pk = primary_keys[reference.source_sheet_name]
                 # Generate a relationship type; here we use the source column name.
                 relationship_type = reference.source_column_name.upper()
 
@@ -341,11 +340,11 @@ class DatabasePopulator:
                 )
 
                 for _, row in source_df.iterrows():
-                    source_node_id = row[source_pk]
+                    source_node_id = row[reference.source_column_name]
                     # Skip rows with NaN primary keys
                     if pd.isna(source_node_id):
                         logger.warning(
-                            f"Skipping row with NaN primary key {source_pk} in sheet {reference.source_sheet_name}"
+                            f"Skipping row with NaN primary key {reference.source_column_name} in sheet {reference.source_sheet_name}"
                         )
                         continue
 
@@ -368,8 +367,8 @@ class DatabasePopulator:
 
                     for token in tokens:
                         cypher_query = (
-                            f"MATCH (s:{source_label} {{{source_pk}: $source_id}}), "
-                            f"(t:{target_label} {{{reference.target_column_name}: $target_value}}) "
+                            f"MATCH (s:{reference.source_sheet_name} {{{reference.source_column_name}: $source_id}}), "
+                            f"(t:{reference.target_sheet_name} {{{reference.target_column_name}: $target_value}}) "
                             f"MERGE (s)-[r:{relationship_type}]->(t)"
                         )
                         logger.debug(

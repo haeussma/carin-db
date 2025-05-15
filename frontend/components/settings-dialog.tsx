@@ -243,16 +243,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
                     <TabsContent value="database" className="space-y-4 mt-4">
                         <div className="space-y-2">
-                            <Label htmlFor="db-name">Name</Label>
-                            <Input
-                                id="db-name"
-                                value={dbName}
-                                onChange={(e) => {
-                                    setDbName(e.target.value)
-                                    setDbError(null)
-                                }}
-                                placeholder="default"
-                            />
                             <Label htmlFor="db-url">URL</Label>
                             <Input
                                 id="db-url"

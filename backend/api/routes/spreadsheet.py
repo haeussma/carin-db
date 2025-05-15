@@ -1,45 +1,142 @@
+import os
+from pathlib import Path
+
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from ...exceptions import TypeInconsistencyError
 from ...models.appconfig import SheetModel
-from ...services.config_service import ConfigService
+from ...services.database_connection import Database
+from ...services.database_populator import DatabasePopulator
 from ...services.sheet_extractor import SheetModelBuilder
-from ...services.spreadsheet_service import SpreadsheetService
+from .config import get_database_config
 
 router = APIRouter(prefix="/spreadsheet")
+
+# Define uploads directory relative to project root
+UPLOAD_DIR = Path("uploads")
 
 
 @router.post("/upload")
 async def upload_spreadsheet(file: UploadFile = File(...)):
-    """Uploads the spreadsheet and returns the file path and sheet model"""
-    logger.info(f"Processing upload request for file: {file.filename}")
+    """Uploads the spreadsheet and returns the file path.
 
-    spreadsheet_service = SpreadsheetService()
+    Returns:
+        str: The absolute path to the uploaded file
+    """
     try:
-        path = await spreadsheet_service.save_uploaded_file(file)
-        logger.debug(f"File saved to {path}")
+        if not file:
+            raise ValueError("No file provided")
 
-        builder = SheetModelBuilder(path=path)
-        builder.validate_spreadsheet_data()
-        sheets = builder.get_sheets()
+        logger.info(f"Processing upload request for file: {file.filename}")
 
-        logger.info(
-            f"Spreadsheet uploaded and content validated successfully to {path}"
+        # Ensure upload directory exists
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Create file path using Path for consistent handling
+        file_path = UPLOAD_DIR / str(file.filename)
+
+        logger.debug(f"Saving file to: {file_path}")
+
+        # Save the file
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            if not content:
+                raise ValueError("Uploaded file is empty")
+            buffer.write(content)
+
+        logger.info(f"File saved successfully at: {file_path}")
+        # Return plain path without quotes
+        return str(file_path)
+
+    except ValueError as e:
+        logger.error(f"Upload validation error: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail={"status": "error", "message": str(e)}
         )
-        return {
-            "status": "success",
-            "file_path": path,
-            "sheets": sheets,
-        }
-    except TypeInconsistencyError as e:
-        return JSONResponse(status_code=400, content=e.to_dict())
     except Exception as e:
-        logger.error(f"Error processing upload request: {str(e)}")
+        logger.error(f"Error uploading file: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail={"error": {"message": f"Error processing upload request: {str(e)}"}},
+            detail={"status": "error", "message": f"Error uploading file: {str(e)}"},
+        )
+
+
+@router.post("/validate_spreadsheet")
+async def validate_spreadsheet(path: str):
+    """Validates a spreadsheet and returns its structure.
+
+    Returns:
+        On success: {
+            "status": "success",
+            "file_path": str,
+            "sheets": List[Sheet]
+        }
+        On validation error: {
+            "status": "error",
+            "type_inconsistencies": List[TypeInconsistencyLocation],
+            "message": str
+        }
+    """
+    try:
+        if not path:
+            raise ValueError("No file path provided")
+
+        # Strip quotes and decode URL-encoded characters
+        path = path.strip('"').strip("'")
+
+        # Check if absolute path exists
+        if os.path.isabs(path) and os.path.exists(path):
+            file_path = path
+        # If not absolute and not at uploads/ prefix
+        elif not path.startswith("uploads/") and not path.startswith("/"):
+            # Try with uploads/ prefix
+            file_path = os.path.join("uploads", path)
+        else:
+            file_path = path
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found at path: {file_path}")
+
+        builder = SheetModelBuilder(path=file_path)
+        validation_errors = builder.validate_spreadsheet_data()
+
+        if validation_errors:
+            logger.warning(f"Found {len(validation_errors)} type inconsistencies")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "type_inconsistencies": [
+                        error.model_dump() for error in validation_errors
+                    ],
+                    "message": "Type inconsistencies found in spreadsheet",
+                },
+            )
+
+        sheets = builder.get_sheets()
+        logger.info(f"Spreadsheet validated successfully: {file_path}")
+
+        return {"status": "success", "file_path": file_path, "sheets": sheets}
+
+    except FileNotFoundError as e:
+        logger.error(f"File not found error: {str(e)}")
+        raise HTTPException(
+            status_code=404, detail={"status": "error", "message": str(e)}
+        )
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail={"status": "error", "message": str(e)}
+        )
+    except Exception as e:
+        logger.error(f"Error validating spreadsheet: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": f"Error validating spreadsheet: {str(e)}",
+            },
         )
 
 
@@ -51,123 +148,72 @@ async def process_spreadsheet(
 
     This endpoint combines upload and process into a single operation.
     """
-    logger.info("Processing spreadsheet")
     try:
+        logger.info("Processing spreadsheet")
         data = await request.json()
         file_path = data.get("file_path")
-        sheet_model = data.get("sheet_model")
 
-        # Process the file using the spreadsheet service
-        db_info = ConfigService.get_first_database()
-        spreadsheet_service = SpreadsheetService()
-        spreadsheet_service.save_sheet_model(
-            path=file_path,
-            sheet_connections=sheet_model.get("sheet_connections", []),
-            sheet_references=sheet_model.get("sheet_references", []),
-            db_uri=db_info.uri,
+        if not file_path:
+            raise ValueError("No file path provided")
+
+        # Strip quotes from the path if present
+        file_path = file_path.strip('"').strip("'")
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found at path: {file_path}")
+
+        # get sheet model from file
+        try:
+            with open("sheet_model.json", "r") as f:
+                sheet_model = SheetModel.model_validate_json(f.read())
+        except FileNotFoundError:
+            raise ValueError("Sheet model not found. Please save the model first.")
+        except Exception as e:
+            raise ValueError(f"Error reading sheet model: {str(e)}")
+
+        logger.info(f"Process using file path: {file_path}")
+
+        db_info = await get_database_config()
+        logger.debug(f"sheet model received with keys: {sheet_model.__dict__.keys()}")
+        logger.debug(f"db info received with keys: {db_info.__dict__.keys()}")
+
+        db = Database(
+            uri=db_info.uri,
+            user=db_info.username,
+            password=db_info.password,
         )
-        return {
-            "status": "success",
-            "message": "File processed and data extracted to database successfully",
-        }
+
+        # Populate DB
+        # load sheets from file
+        builder = SheetModelBuilder(path=file_path)
+        sheets = builder.sheets
+        db_populator = DatabasePopulator(
+            sheets=sheets,
+        )
+        db_populator.extract_to_db(db, sheet_model)
+
+        # Return success
+        return {"message": "Spreadsheet processed successfully"}
+
     except ValueError as e:
-        error_message = str(e)
-        logger.error(f"Validation error processing file: {error_message}")
-        return JSONResponse(
-            status_code=400,
-            content={
-                "status": "error",
-                "message": "Error processing file",
-                "detail": error_message,
-            },
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(w
+            status_code=400, detail={"status": "error", "message": str(e)}
+        )
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {str(e)}")
+        raise HTTPException(
+            status_code=404, detail={"status": "error", "message": str(e)}
         )
     except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error processing file: {error_message}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "message": "Error processing file",
-                "detail": error_message,
-            },
-        )
-
-
-@router.get("/model")
-async def get_graph_model():
-    """Get the graph model for a database."""
-
-    spreadsheet_service = SpreadsheetService()
-
-    # Get the first database
-    try:
-        model = spreadsheet_service.load_sheet_model()
-    except ValueError:
-        return {"model": {}}
-    return {"model": model}
-
-
-@router.post("/model")
-async def save_graph_model(request: Request):
-    """Save a graph model for a database."""
-    try:
-        logger.debug("Initializing save graph model")
-        data = await request.json()
-        db_info = ConfigService.get_first_database()
-        logger.debug(f"Database info: {db_info}")
-
-        service = SpreadsheetService()
-        service.save_sheet_model(
-            path=data.get("file_path"),
-            sheet_connections=data.get("sheet_connections"),
-            sheet_references=data.get("sheet_references"),
-            db_uri=db_info.uri,
-        )
-        logger.debug(f"Graph model {data} saved successfully")
-        return {"status": "success", "message": "Graph model saved successfully"}
-    except Exception as e:
-        logger.error(f"Error saving graph model: {str(e)}")
+        logger.error(f"Error processing spreadsheet: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail={"error": {"message": f"Error saving graph model: {str(e)}"}},
+            detail={
+                "status": "error",
+                "message": f"Error processing spreadsheet: {str(e)}",
+            },
         )
-
-
-@router.delete("/model")
-async def delete_graph_model():
-    """Delete the graph model for a database."""
-    spreadsheet_service = SpreadsheetService()
-    spreadsheet_service.delete_sheet_model()
-    return {"status": "success", "message": "Graph model deleted successfully"}
-
-
-# @router.post("/generate")
-# async def generate_spreadsheet(request: Request):
-#     """Generate a spreadsheet from provided data."""
-#     try:
-#         payload = await request.json()
-#         data = payload.get("data", [])
-
-#         if not data:
-#             logger.warning("No data provided for spreadsheet generation")
-#             return JSONResponse(status_code=400, content={"error": "No data provided"})
-
-#         # Generate spreadsheet using the service
-#         output = SpreadsheetService.generate_spreadsheet(data)
-
-#         headers = {"Content-Disposition": 'attachment; filename="data.xlsx"'}
-#         return StreamingResponse(
-#             output,
-#             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#             headers=headers,
-#         )
-#     except Exception as e:
-#         logger.error(f"Error generating spreadsheet: {str(e)}")
-#         raise HTTPException(
-#             status_code=500,
-#             detail={"error": {"message": f"Error generating spreadsheet: {str(e)}"}},
-#         )
 
 
 if __name__ == "__main__":

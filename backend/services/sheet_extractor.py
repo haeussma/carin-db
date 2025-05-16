@@ -3,9 +3,9 @@ from typing import Dict, List
 
 import pandas as pd
 
-from ..data_sanity import DataSanityChecker
-from ..exceptions import TypeInconsistencyError, TypeInconsistencyLocation
-from ..models.appconfig import (
+from backend.data_sanity import DataSanityChecker
+from backend.exceptions import TypeInconsistencyError, TypeInconsistencyLocation
+from backend.models.model import (
     Column,
     Sheet,
     SheetConnection,
@@ -236,25 +236,3 @@ class SheetModelBuilder:
         return self.validate_relations(
             sheet_model.sheet_connections, sheet_model.sheet_references
         )
-
-
-if __name__ == "__main__":
-    from devtools import pprint
-
-    from ..models.appconfig import SheetReferences
-
-    sheet_references = [
-        SheetReferences(
-            source_sheet_name="Reaction",
-            source_column_name="reaction_id",
-            target_sheet_name="Measurement",
-            target_column_name="has_reaction",
-        )
-    ]
-    path = "test_data/lilly_data.xlsx"
-
-    builder = SheetModelBuilder(path)
-    sheet_model = builder.build_sheet_model(
-        sheet_connections=[], sheet_references=sheet_references
-    )
-    pprint(sheet_model)

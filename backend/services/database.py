@@ -1,5 +1,6 @@
-from typing import Any
+from typing import Annotated, Any
 
+from fastapi import Depends
 from loguru import logger
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import (
@@ -10,7 +11,8 @@ from neo4j.exceptions import (
     SessionExpired,
 )
 
-from ..models.appconfig import Attribute, GraphModel, Node, Relationship
+from backend.config import config
+from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
 
 
 class DatabaseError(Exception):
@@ -35,12 +37,13 @@ class Database:
     def __init__(
         self,
         uri: str,
-        user: str,
+        username: str,
         password: str,
     ):
         self.uri = uri
-        self.user = user
-        self.driver = self.connect(uri, user, password)
+        self.username = username
+        self.password = password
+        self.driver = self.connect(uri, username, password)
         self.validate_connection()
 
     def connect(self, uri: str, user: str, password: str) -> Driver:
@@ -169,6 +172,7 @@ class Database:
 
         with self.driver.session() as session:
             nodes_data = session.run(node_query).data()
+
             nodes = [
                 Node(
                     name=node["name"],
@@ -195,10 +199,12 @@ class Database:
         return response[0]["labels"]
 
 
-if __name__ == "__main__":
-    from devtools import pprint
+def get_db():
+    return Database(
+        uri=config.neo4j_uri,
+        username=config.neo4j_username,
+        password=config.neo4j_password,
+    )
 
-    db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
-    pprint(db.node_count)
 
-    # pprint(db.get_db_structure)
+DB = Annotated[Database, Depends(get_db)]

@@ -5,16 +5,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from .api.routes import config, database, spreadsheet
-from .services.config_service import ConfigService
+from .api.routes import config, database, llm, spreadsheet
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown events."""
     logger.info("Starting up FastAPI application")
-    # Load configuration to ensure it exists
-    ConfigService.load_config()
     # Create uploads directory if it doesn't exist
     if not os.path.exists("uploads"):
         os.makedirs("uploads")
@@ -38,6 +35,7 @@ app.add_middleware(
 app.include_router(config.router, prefix="/api")
 app.include_router(database.router, prefix="/api")
 app.include_router(spreadsheet.router, prefix="/api")
+app.include_router(llm.router, prefix="/api")
 
 
 @app.get("/test")

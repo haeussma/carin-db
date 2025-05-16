@@ -1,15 +1,15 @@
 import os
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from ...models.appconfig import SheetModel
-from ...services.database_connection import Database
-from ...services.database_populator import DatabasePopulator
-from ...services.sheet_extractor import SheetModelBuilder
-from .config import get_database_config
+from backend.models.model import SheetModel
+from backend.services.database import DB
+from backend.services.database_populator import DatabasePopulator
+from backend.services.sheet_extractor import SheetModelBuilder
 
 router = APIRouter(prefix="/spreadsheet")
 
@@ -142,7 +142,8 @@ async def validate_spreadsheet(path: str):
 
 @router.post("/process")
 async def process_spreadsheet(
-    request: Request,
+    file_path: Annotated[str, Body()],
+    db: DB,
 ):
     """Upload and process a spreadsheet with the provided graph model configuration.
 
@@ -150,8 +151,6 @@ async def process_spreadsheet(
     """
     try:
         logger.info("Processing spreadsheet")
-        data = await request.json()
-        file_path = data.get("file_path")
 
         if not file_path:
             raise ValueError("No file path provided")
@@ -173,15 +172,7 @@ async def process_spreadsheet(
 
         logger.info(f"Process using file path: {file_path}")
 
-        db_info = await get_database_config()
         logger.debug(f"sheet model received with keys: {sheet_model.__dict__.keys()}")
-        logger.debug(f"db info received with keys: {db_info.__dict__.keys()}")
-
-        db = Database(
-            uri=db_info.uri,
-            user=db_info.username,
-            password=db_info.password,
-        )
 
         # Populate DB
         # load sheets from file
@@ -197,7 +188,7 @@ async def process_spreadsheet(
 
     except ValueError as e:
         logger.error(f"Validation error: {str(e)}")
-        raise HTTPException(w
+        raise HTTPException(
             status_code=400, detail={"status": "error", "message": str(e)}
         )
     except FileNotFoundError as e:
@@ -214,28 +205,3 @@ async def process_spreadsheet(
                 "message": f"Error processing spreadsheet: {str(e)}",
             },
         )
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    from ...models.appconfig import SheetReferences
-
-    data_path = "test_data/lilly_data.xlsx"
-
-    # dummy sheet model
-    sheet_references = [
-        SheetReferences(
-            source_sheet_name="Reaction",
-            source_column_name="reaction_id",
-            target_sheet_name="Measurement",
-            target_column_name="has_reaction",
-        )
-    ]
-    sheet_model = SheetModel(
-        sheet_connections=[],
-        sheet_references=[],
-    )
-
-    # test process endpoint
-    asyncio.run(process_spreadsheet(request=Request(scope={})))

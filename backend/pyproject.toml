@@ -19,6 +19,11 @@ neo4j = "^5.27.0"
 instructor = "^1.7.2"
 xlsxwriter = "^3.2.2"
 dotenv = "^0.9.9"
+fastmcp = "^2.3.4"
+openai-agents = "^0.0.15"
+pyenzyme = {git = "https://github.com/EnzymeML/PyEnzyme.git", rev = "v2-migration"}
+pydantic-ai = "^0.2.4"
+pydantic-settings = "^2.9.1"
 
 
 [tool.poetry.group.dev.dependencies]

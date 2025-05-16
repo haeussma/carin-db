@@ -4,13 +4,15 @@ from typing import Dict, List
 import pandas as pd
 from loguru import logger
 
-from ..models.appconfig import (
+from backend.models.error_model import GraphValidationError, GraphValidationResult
+from backend.models.model import (
+    Column,
+    Sheet,
     SheetConnection,
     SheetModel,
     SheetReferences,
 )
-from ..models.error_model import GraphValidationError, GraphValidationResult
-from .database_connection import Database
+from backend.services.database import Database
 
 
 class DatabasePopulator:
@@ -215,10 +217,10 @@ class DatabasePopulator:
         # Create a sheet model from the sheets
         sheet_model = SheetModel(
             sheets=[
-                Node(
+                Sheet(
                     name=sheet_name,
-                    attributes=[
-                        {"name": col, "data_type": "string"} for col in df.columns
+                    columns=[
+                        Column(name=col, data_type="string") for col in df.columns
                     ],
                 )
                 for sheet_name, df in self.sheets.items()
@@ -227,10 +229,10 @@ class DatabasePopulator:
 
         # Collect all validation errors
         reference_validation = self._validate_sheet_references(
-            sheet_model, graph_model.sheet_references
+            sheet_model, sheet_model.sheet_references
         )
         connection_validation = self._validate_sheet_connections(
-            sheet_model, graph_model.sheet_connections
+            sheet_model, sheet_model.sheet_connections
         )
 
         # Combine all validation errors

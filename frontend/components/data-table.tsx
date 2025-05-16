@@ -9,6 +9,19 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 // This type is a placeholder. Adjust it based on your actual data structure.
 type DataItem = Record<string, any>  // Use 'any' to accommodate nested objects
 
+// Response types
+type TableResponse = {
+    model: 'data_table';
+    data: DataItem[];
+}
+
+type TextResponse = {
+    model: 'text';
+    data: string;
+}
+
+type ApiResponse = TableResponse | TextResponse;
+
 function renderCellValue(value: any) {
     if (value === null || value === undefined) {
         return '-'
@@ -91,25 +104,26 @@ function flattenNestedData(data: DataItem[]): {
 
 export default function DataTableCard() {
     const [question, setQuery] = useState('')
-    const [data, setData] = useState<DataItem[]>([])
+    const [response, setResponse] = useState<ApiResponse | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [errorMessage, setErrorMessage] = useState<string>('')
     const [viewMode, setViewMode] = useState<'flat' | 'raw'>('flat')
 
-    // Process the data for display
+    // Process the data for display if it's a table response
     const { flattenedData, headers } = useMemo(() =>
-        flattenNestedData(data), [data]);
+        response?.model === 'data_table' ? flattenNestedData(response.data) : { flattenedData: [], headers: [] },
+        [response]
+    );
 
     const handleSend = async () => {
         setIsLoading(true);
         setErrorMessage(''); // Clear any previous error messages
-        setData([]);
+        setResponse(null);
 
         try {
-            const response = await fetch('http://localhost:8000/api/ask', {
+            const response = await fetch('http://localhost:8000/api/llm/ask?question=' + question, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question })
             });
 
             const result = await response.json();
@@ -131,38 +145,9 @@ export default function DataTableCard() {
                 return;
             }
 
-            // Process the response data
-            if (result.response) {
-                // Check if response is an array
-                if (Array.isArray(result.response)) {
-                    console.log('Data received (array):', result.response);
+            // Set the response based on the model type
+            setResponse(result as ApiResponse);
 
-                    // Handle empty array
-                    if (result.response.length === 0) {
-                        setErrorMessage('No data found for your query');
-                        return;
-                    }
-
-                    // Process the array data
-                    setData(result.response);
-                } else if (typeof result.response === 'object') {
-                    // Handle single object response
-                    console.log('Data received (object):', result.response);
-                    setData([result.response]);
-                } else {
-                    // Handle string or other primitive response
-                    console.log('Data received (primitive):', result.response);
-                    setData([{ response: result.response }]);
-                }
-            } else if (result.result && Array.isArray(result.result)) {
-                // For backward compatibility, if result field exists and is an array
-                console.log('Data received (result field):', result.result);
-                setData(result.result);
-            } else {
-                // If neither expected format is found
-                console.warn('Unexpected response format:', result);
-                setErrorMessage('Received an unexpected response format from the server');
-            }
         } catch (error) {
             console.error('Error fetching data:', error);
             setErrorMessage('Failed to connect to the server. Please check if the backend is running.');
@@ -172,14 +157,15 @@ export default function DataTableCard() {
     };
 
     const handleSaveToFile = async () => {
+        if (!response || response.model !== 'data_table') return;
+
         try {
-            // Replace with your actual API endpoint
-            const response = await fetch('http://localhost:8000/api/generateSpreadsheet', {
+            const fileResponse = await fetch('http://localhost:8000/api/generateSpreadsheet', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ data })
+                body: JSON.stringify({ data: response.data })
             })
-            const blob = await response.blob()
+            const blob = await fileResponse.blob()
             const url = window.URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.style.display = 'none'
@@ -219,7 +205,15 @@ export default function DataTableCard() {
                     </div>
                 )}
 
-                {data.length > 0 && (
+                {/* Display text response */}
+                {response?.model === 'text' && (
+                    <div className="bg-white p-4 rounded-lg border">
+                        <p className="whitespace-pre-wrap">{response.data}</p>
+                    </div>
+                )}
+
+                {/* Display table response */}
+                {response?.model === 'data_table' && response.data.length > 0 && (
                     <div className="space-y-2">
                         <div className="flex justify-end space-x-2">
                             <Button
@@ -267,13 +261,13 @@ export default function DataTableCard() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        {Object.keys(data[0]).map((key) => (
+                                        {Object.keys(response.data[0]).map((key) => (
                                             <TableHead key={key}>{key}</TableHead>
                                         ))}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {data.map((item, index) => (
+                                    {response.data.map((item, index) => (
                                         <TableRow key={index}>
                                             {Object.values(item).map((value, valueIndex) => (
                                                 <TableCell key={valueIndex}>
@@ -289,9 +283,11 @@ export default function DataTableCard() {
                 )}
             </CardContent>
             <CardFooter>
-                <Button onClick={handleSaveToFile} disabled={data.length === 0} className="w-full">
-                    Save to file
-                </Button>
+                {response?.model === 'data_table' && response.data.length > 0 && (
+                    <Button onClick={handleSaveToFile} className="w-full">
+                        Save to file
+                    </Button>
+                )}
             </CardFooter>
         </Card>
     )

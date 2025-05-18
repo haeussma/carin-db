@@ -10,7 +10,7 @@ from backend.models.model import (
     Sheet,
     SheetConnection,
     SheetModel,
-    SheetReferences,
+    SheetReference,
 )
 from backend.services.database import Database
 
@@ -18,7 +18,7 @@ from backend.services.database import Database
 class DatabasePopulator:
     """Service for extracting data from spreadsheets to a Neo4j database."""
 
-    def __init__(self, sheets: Dict[str, pd.DataFrame]):
+    def __init__(self, sheets: Dict[str, pd.DataFrame], source_file: str):
         """Initialize the DatabaseExtractor.
 
         Args:
@@ -26,6 +26,7 @@ class DatabasePopulator:
         """
         self.sheets = sheets
         self.batch_id = str(uuid.uuid4())
+        self.source_file = source_file
 
     def _parse_source_values(self, values: pd.Series) -> List[List[str]]:
         """Parse source values into lists of strings, handling NaN values."""
@@ -108,7 +109,7 @@ class DatabasePopulator:
         return validation
 
     def _validate_sheet_references(
-        self, sheet_model: SheetModel, references: List[SheetReferences]
+        self, sheet_model: SheetModel, references: List[SheetReference]
     ) -> GraphValidationResult:
         """Validate all sheet references and collect any validation errors."""
         validation = GraphValidationResult(
@@ -265,10 +266,10 @@ class DatabasePopulator:
             primary_keys[connection.target_sheet_name] = connection.key
 
         # Default to first column for sheets without connections
-        for name in self.sheets.keys():
-            if name not in primary_keys:
-                df = self.sheets[name]
-                primary_keys[name] = df.columns[0]
+        # for name in self.sheets.keys():
+        #     if name not in primary_keys:
+        #         df = self.sheets[name]
+        #         primary_keys[name] = df.columns[0]
 
         logger.info(f"Using primary keys: {primary_keys}")
 
@@ -276,28 +277,45 @@ class DatabasePopulator:
             # --- Step 1: Create Nodes ---
             for sheet_name, df in self.sheets.items():
                 label = sheet_name
-                pk = primary_keys[sheet_name]
-                logger.info(
-                    f"Creating nodes for sheet {sheet_name} with label {label} and primary key {pk}"
-                )
 
-                for _, row in df.iterrows():
-                    # Skip rows with NaN primary keys
-                    if pd.isna(row[pk]):
+                # 1 · detect candidate PK columns
+                pk_candidates = [
+                    c
+                    for c in df.columns
+                    if c.isupper() and (c.endswith("_ID") or c.endswith("_KEY"))
+                ]
+
+                # 2 · decide PK
+                if len(pk_candidates) == 1:
+                    pk = pk_candidates[0]
+                elif len(pk_candidates) == 0:
+                    pk = "_row_uuid"
+                    if "_row_uuid" not in df.columns:  # add synthetic UUIDs
+                        df["_row_uuid"] = [str(uuid.uuid4()) for _ in range(len(df))]
+                    logger.warning(
+                        f"Sheet '{sheet_name}' has no PK column, using synthetic '_row_uuid' as PK."
+                    )
+                else:
+                    raise ValueError(
+                        f"Sheet '{sheet_name}' has multiple candidate PK columns "
+                        f"{pk_candidates}. Keep zero or exactly one."
+                    )
+
+                logger.info(f"Creating nodes for '{sheet_name}' (PK = '{pk}')")
+
+                for idx, row in df.iterrows():
+                    value = row[pk]
+                    if pd.isna(value):
                         logger.warning(
-                            f"Skipping row with NaN primary key in sheet {sheet_name}"
+                            f"Skipping row {idx} with NaN PK in '{sheet_name}'"
                         )
                         continue
 
                     props = row.to_dict()
-                    # Remove NaN values
                     props = {k: v for k, v in props.items() if not pd.isna(v)}
 
-                    cypher_query = f"MERGE (n:{label} {{{pk}: $value}}) SET n += $props"
-                    logger.debug(
-                        f"Executing query: {cypher_query} with value={props[pk]}"
-                    )
-                    session.run(cypher_query, value=props[pk], props=props)
+                    cypher = f"MERGE (n:{label} {{{pk}: $value}}) SET n += $props"
+                    session.run(cypher, value=value, props=props)
 
             # --- Step 2: Create Relationships for Sheet Connections ---
             for connection in sheet_model.sheet_connections:

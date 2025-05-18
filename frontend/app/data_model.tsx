@@ -32,8 +32,8 @@ export interface AppConfig extends JsonLd {
 }
 
 export const AppConfigCodec = D.lazy("AppConfig", () => D.struct({
-    databases: D.array(DatabaseCodec),
-    openai_api_key: D.nullable(D.string),
+  databases: D.array(DatabaseCodec),
+  openai_api_key: D.nullable(D.string),
 }));
 
 
@@ -53,11 +53,11 @@ export interface Database extends JsonLd {
 }
 
 export const DatabaseCodec = D.lazy("Database", () => D.struct({
-    name: D.nullable(D.string),
-    uri: D.nullable(D.string),
-    username: D.nullable(D.string),
-    password: D.nullable(D.string),
-    graph_model: D.nullable(GraphModelCodec),
+  name: D.nullable(D.string),
+  uri: D.nullable(D.string),
+  username: D.nullable(D.string),
+  password: D.nullable(D.string),
+  graph_model: D.nullable(GraphModelCodec),
 }));
 
 
@@ -67,12 +67,12 @@ export const DatabaseCodec = D.lazy("Database", () => D.struct({
 **/
 export interface GraphModel extends JsonLd {
   sheet_connections?: SheetConnection[] | null;
-  sheet_references?: SheetReferences[] | null;
+  sheet_references?: SheetReference[] | null;
 }
 
 export const GraphModelCodec = D.lazy("GraphModel", () => D.struct({
-    sheet_connections: D.array(SheetConnectionCodec),
-    sheet_references: D.array(SheetReferencesCodec),
+  sheet_connections: D.array(SheetConnectionCodec),
+  sheet_references: D.array(SheetReferenceCodec),
 }));
 
 
@@ -90,10 +90,10 @@ export interface SheetConnection extends JsonLd {
 }
 
 export const SheetConnectionCodec = D.lazy("SheetConnection", () => D.struct({
-    source_sheet_name: D.nullable(D.string),
-    target_sheet_name: D.nullable(D.string),
-    edge_name: D.nullable(D.string),
-    key: D.nullable(D.string),
+  source_sheet_name: D.nullable(D.string),
+  target_sheet_name: D.nullable(D.string),
+  edge_name: D.nullable(D.string),
+  key: D.nullable(D.string),
 }));
 
 
@@ -103,16 +103,16 @@ export const SheetConnectionCodec = D.lazy("SheetConnection", () => D.struct({
     * @param target_sheet_name - The name of the target sheet
     * @param target_column_name - The name of the column in the target sheet
 **/
-export interface SheetReferences extends JsonLd {
+export interface SheetReference extends JsonLd {
   source_sheet_name?: string | null;
   source_column_name?: string | null;
   target_sheet_name?: string | null;
   target_column_name?: string | null;
 }
 
-export const SheetReferencesCodec = D.lazy("SheetReferences", () => D.struct({
-    source_sheet_name: D.nullable(D.string),
-    source_column_name: D.nullable(D.string),
-    target_sheet_name: D.nullable(D.string),
-    target_column_name: D.nullable(D.string),
+export const SheetReferenceCodec = D.lazy("SheetReference", () => D.struct({
+  source_sheet_name: D.nullable(D.string),
+  source_column_name: D.nullable(D.string),
+  target_sheet_name: D.nullable(D.string),
+  target_column_name: D.nullable(D.string),
 }));

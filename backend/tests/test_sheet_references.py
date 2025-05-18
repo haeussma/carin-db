@@ -1,7 +1,6 @@
 import pytest
 
-from backend.models.graph_model import SheetReferences
-from backend.models.sheet_model import Column, Sheet, SheetModel
+from backend.models.model import Column, Sheet, SheetModel, SheetReference
 
 
 @pytest.fixture
@@ -39,9 +38,9 @@ def sample_sheet_model() -> SheetModel:
 
 
 @pytest.fixture
-def valid_reference() -> SheetReferences:
+def valid_reference() -> SheetReference:
     """Create a valid sheet reference based on actual example."""
-    return SheetReferences(
+    return SheetReference(
         source_sheet_name="Reaction",
         source_column_name="products",
         target_sheet_name="Molecule",
@@ -87,7 +86,7 @@ def test_compare_to_sheet_valid_reference(sample_sheet_model, valid_reference):
 
 def test_compare_to_sheet_invalid_source_sheet(sample_sheet_model):
     """Test with invalid source sheet."""
-    invalid_reference = SheetReferences(
+    invalid_reference = SheetReference(
         source_sheet_name="NonExistent",
         source_column_name="products",
         target_sheet_name="Molecule",
@@ -99,7 +98,7 @@ def test_compare_to_sheet_invalid_source_sheet(sample_sheet_model):
 
 def test_compare_to_sheet_invalid_target_sheet(sample_sheet_model):
     """Test with invalid target sheet."""
-    invalid_reference = SheetReferences(
+    invalid_reference = SheetReference(
         source_sheet_name="Reaction",
         source_column_name="products",
         target_sheet_name="NonExistent",
@@ -111,7 +110,7 @@ def test_compare_to_sheet_invalid_target_sheet(sample_sheet_model):
 
 def test_compare_to_sheet_invalid_source_column(sample_sheet_model):
     """Test with invalid source column."""
-    invalid_reference = SheetReferences(
+    invalid_reference = SheetReference(
         source_sheet_name="Reaction",
         source_column_name="nonexistent",
         target_sheet_name="Molecule",
@@ -125,7 +124,7 @@ def test_compare_to_sheet_invalid_source_column(sample_sheet_model):
 
 def test_compare_to_sheet_invalid_target_column(sample_sheet_model):
     """Test with invalid target column."""
-    invalid_reference = SheetReferences(
+    invalid_reference = SheetReference(
         source_sheet_name="Reaction",
         source_column_name="products",
         target_sheet_name="Molecule",

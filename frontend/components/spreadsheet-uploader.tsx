@@ -253,14 +253,15 @@ export default function SpreadsheetUploader() {
       }
 
       // Then process the spreadsheet
+      // log the file path about to be sent
+      console.log("File path about to be sent:", filePath);
+
       const processRes = await fetch("http://localhost:8000/api/spreadsheet/process", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          file_path: filePath,
-        }),
+        body: JSON.stringify(filePath)
       });
 
       if (!processRes.ok) {

@@ -1,10 +1,13 @@
 import os
+from io import BytesIO
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Dict, List
 
+import pandas as pd
 from fastapi import APIRouter, Body, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
+from pydantic import BaseModel
 
 from backend.models.model import SheetModel
 from backend.services.database import DB
@@ -17,7 +20,11 @@ router = APIRouter(prefix="/spreadsheet")
 UPLOAD_DIR = Path("uploads")
 
 
-@router.post("/upload")
+class SpreadsheetRequest(BaseModel):
+    data: List[Dict[str, Any]]
+
+
+@router.post("/upload", tags=["Spreadsheet"])
 async def upload_spreadsheet(file: UploadFile = File(...)):
     """Uploads the spreadsheet and returns the file path.
 
@@ -62,7 +69,7 @@ async def upload_spreadsheet(file: UploadFile = File(...)):
         )
 
 
-@router.post("/validate_spreadsheet")
+@router.post("/validate_spreadsheet", tags=["Spreadsheet"])
 async def validate_spreadsheet(path: str):
     """Validates a spreadsheet and returns its structure.
 
@@ -140,14 +147,13 @@ async def validate_spreadsheet(path: str):
         )
 
 
-@router.post("/process")
+@router.post("/process", tags=["Spreadsheet"])
 async def process_spreadsheet(
     file_path: Annotated[str, Body()],
     db: DB,
 ):
-    """Upload and process a spreadsheet with the provided graph model configuration.
-
-    This endpoint combines upload and process into a single operation.
+    """Reads a spreadsheet and populates the database with the data.
+    According to the sheet model, the data is mapped to the database.
     """
     try:
         logger.info("Processing spreadsheet")
@@ -163,7 +169,7 @@ async def process_spreadsheet(
 
         # get sheet model from file
         try:
-            with open("sheet_model.json", "r") as f:
+            with open("uploads/sheet_model.json", "r") as f:
                 sheet_model = SheetModel.model_validate_json(f.read())
         except FileNotFoundError:
             raise ValueError("Sheet model not found. Please save the model first.")
@@ -180,6 +186,7 @@ async def process_spreadsheet(
         sheets = builder.sheets
         db_populator = DatabasePopulator(
             sheets=sheets,
+            source_file=file_path,
         )
         db_populator.extract_to_db(db, sheet_model)
 
@@ -205,3 +212,56 @@ async def process_spreadsheet(
                 "message": f"Error processing spreadsheet: {str(e)}",
             },
         )
+
+
+@router.post("/generate", tags=["Spreadsheet"])
+async def generate_spreadsheet(request: SpreadsheetRequest):
+    logger.info("Generating spreadsheet from data")
+
+    if not request.data:
+        logger.warning("No data provided for spreadsheet generation")
+        raise HTTPException(status_code=400, detail="No data provided")
+
+    # Convert data to pandas DataFrame
+    df = pd.DataFrame(request.data)
+    logger.debug(f"Created DataFrame with shape: {df.shape}")
+
+    # Create an Excel file in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Data")
+
+        # Get the workbook and worksheet objects
+        workbook = writer.book
+        worksheet = writer.sheets["Data"]
+
+        # Add some formatting
+        header_format = workbook.add_format(
+            {
+                "bold": True,
+                "text_wrap": True,
+                "valign": "top",
+                "bg_color": "#D9E1F2",
+                "border": 1,
+            }
+        )
+
+        # Write the column headers with the defined format
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_format)
+            # Set column width based on content
+            max_length = max(df[value].astype(str).apply(len).max(), len(str(value)))
+            worksheet.set_column(col_num, col_num, max_length + 2)
+
+    output.seek(0)
+    logger.info("Successfully generated spreadsheet")
+
+    headers = {
+        "Content-Disposition": 'attachment; filename="data.xlsx"',
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )

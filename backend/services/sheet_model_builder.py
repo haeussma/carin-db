@@ -6,12 +6,12 @@ from loguru import logger
 
 from ..data_sanity import DataSanityChecker
 from ..exceptions import TypeInconsistencyError, TypeInconsistencyLocation
-from ..models.appconfig import (
+from ..models.model import (
     Column,
     Sheet,
     SheetConnection,
     SheetModel,
-    SheetReferences,
+    SheetReference,
 )
 
 
@@ -63,7 +63,7 @@ class SheetModelBuilder:
     def build_sheet_model(
         self,
         sheet_connections: list[SheetConnection],
-        sheet_references: list[SheetReferences],
+        sheet_references: list[SheetReference],
     ) -> SheetModel:
         """Builds the sheet model based on the excel file and the specified sheet connections and references.
 
@@ -168,25 +168,3 @@ class SheetModelBuilder:
                     )
 
         return errors
-
-
-if __name__ == "__main__":
-    from devtools import pprint
-
-    from ..models.appconfig import SheetReferences
-
-    sheet_references = [
-        SheetReferences(
-            source_sheet_name="Reaction",
-            source_column_name="reaction_id",
-            target_sheet_name="Measurement",
-            target_column_name="has_reaction",
-        )
-    ]
-    path = "test_data/lilly_data.xlsx"
-
-    builder = SheetModelBuilder(path)
-    sheet_model = builder.build_sheet_model(
-        sheet_connections=[], sheet_references=sheet_references
-    )
-    pprint(sheet_model)

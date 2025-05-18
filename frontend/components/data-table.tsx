@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // This type is a placeholder. Adjust it based on your actual data structure.
 type DataItem = Record<string, any>  // Use 'any' to accommodate nested objects
@@ -121,9 +123,10 @@ export default function DataTableCard() {
         setResponse(null);
 
         try {
-            const response = await fetch('http://localhost:8000/api/llm/ask?question=' + question, {
+            const response = await fetch('http://localhost:8000/api/llm/ask', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(question)
             });
 
             const result = await response.json();
@@ -160,22 +163,30 @@ export default function DataTableCard() {
         if (!response || response.model !== 'data_table') return;
 
         try {
-            const fileResponse = await fetch('http://localhost:8000/api/generateSpreadsheet', {
+            const fileResponse = await fetch('http://localhost:8000/api/spreadsheet/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ data: response.data })
-            })
-            const blob = await fileResponse.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.style.display = 'none'
-            a.href = url
-            a.download = 'data.xlsx'
-            document.body.appendChild(a)
-            a.click()
-            window.URL.revokeObjectURL(url)
+            });
+
+            if (!fileResponse.ok) {
+                const errorData = await fileResponse.json();
+                throw new Error(errorData.detail || 'Failed to generate spreadsheet');
+            }
+
+            const blob = await fileResponse.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'data.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
         } catch (error) {
-            console.error('Error generating spreadsheet:', error)
+            console.error('Error generating spreadsheet:', error);
+            setErrorMessage(error instanceof Error ? error.message : 'Failed to generate spreadsheet');
         }
     }
 
@@ -205,10 +216,12 @@ export default function DataTableCard() {
                     </div>
                 )}
 
-                {/* Display text response */}
+                {/* Display text response with markdown */}
                 {response?.model === 'text' && (
-                    <div className="bg-white p-4 rounded-lg border">
-                        <p className="whitespace-pre-wrap">{response.data}</p>
+                    <div className="bg-white p-4 rounded-lg border prose prose-sm max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {response.data}
+                        </ReactMarkdown>
                     </div>
                 )}
 

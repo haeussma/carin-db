@@ -1,18 +1,13 @@
+import threading
 from typing import Annotated, Any
 
 from fastapi import Depends
 from loguru import logger
-from neo4j import Driver, GraphDatabase
-from neo4j.exceptions import (
-    AuthError,
-    DriverError,
-    Neo4jError,
-    ServiceUnavailable,
-    SessionExpired,
-)
+from neo4j import GraphDatabase
+from neo4j.exceptions import AuthError, ServiceUnavailable
 
-from backend.config import config
 from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
+from backend.settings import config
 
 
 class DatabaseError(Exception):
@@ -34,77 +29,38 @@ class DatabaseAuthenticationError(DatabaseError):
 
 
 class Database:
-    def __init__(
-        self,
-        uri: str,
-        username: str,
-        password: str,
-    ):
+    _instance: "Database | None" = None
+    _lock = threading.Lock()
+    _initialized: bool = False
+
+    def __init__(self, uri: str, username: str, password: str):
         self.uri = uri
         self.username = username
         self.password = password
-        self.driver = self.connect(uri, username, password)
-        self.validate_connection()
+        self.driver = self._connect()
+        self._validate_connection()
 
-    def connect(self, uri: str, user: str, password: str) -> Driver:
-        """Create a Neo4j driver instance."""
-        try:
-            driver = GraphDatabase.driver(uri, auth=(user, password))
-            logger.debug(f"Created Neo4j driver for URI: {uri}")
-            return driver
-        except Exception as e:
-            logger.error(f"Failed to create Neo4j driver: {str(e)}")
-            raise DatabaseConnectionError(f"Failed to create Neo4j driver: {str(e)}")
+    def _connect(self):
+        return GraphDatabase.driver(self.uri, auth=(self.username, self.password))
 
-    def validate_connection(self) -> None:
-        """Validate the database connection by executing a simple query."""
+    def _validate_connection(self):
         try:
-            with self.driver.session() as session:
-                # Execute a simple query to verify connection
-                result = session.run("RETURN 1")
-                result.single()
-                logger.info("Database connection validated successfully")
+            with self.driver.session() as s:
+                s.run("RETURN 1").single()
+            logger.info("Neo4j connection OK")
         except AuthError as e:
-            logger.error(f"Authentication failed: {str(e)}")
-            raise DatabaseAuthenticationError(f"Authentication failed: {str(e)}")
+            logger.error(f"Neo4j auth failed: {e}")
+            raise DatabaseAuthenticationError("Invalid Neo4j username or password.")
         except ServiceUnavailable as e:
-            logger.error(f"Database service unavailable: {str(e)}")
-            raise DatabaseConnectionError(
-                f"Database service unavailable. Please check if:\n"
-                f"1. The Neo4j server is running\n"
-                f"2. The connection URL is correct\n"
-                f"3. The database is accessible from your network\n"
-                f"Current URL: {self.uri}"
-            )
-        except SessionExpired as e:
-            logger.error(f"Session expired: {str(e)}")
-            raise DatabaseConnectionError(f"Session expired: {str(e)}")
-        except DriverError as e:
-            logger.error(f"Driver error: {str(e)}")
-            raise DatabaseConnectionError(f"Driver error: {str(e)}")
-        except Neo4jError as e:
-            logger.error(f"Neo4j error: {str(e)}")
-            raise DatabaseError(f"Neo4j error: {str(e)}")
+            logger.error(f"Neo4j connection failed: {e}")
+            raise DatabaseConnectionError("Could not connect to the Neo4j database.")
         except Exception as e:
-            logger.error(f"Unexpected error validating connection: {str(e)}")
-            raise DatabaseError(f"Unexpected error validating connection: {str(e)}")
+            logger.error(f"Unexpected error: {e}")
+            raise DatabaseError("An unknown error occurred while connecting to Neo4j.")
 
     def close(self) -> None:
-        """Close the database connection."""
-        try:
+        if self.driver:
             self.driver.close()
-            logger.info("Database connection closed")
-        except Exception as e:
-            logger.error(f"Error closing database connection: {str(e)}")
-            raise DatabaseError(f"Error closing database connection: {str(e)}")
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()
 
     def execute_query(self, query: str):
         with self.driver.session() as session:
@@ -199,12 +155,8 @@ class Database:
         return response[0]["labels"]
 
 
-def get_db():
-    return Database(
-        uri=config.neo4j_uri,
-        username=config.neo4j_username,
-        password=config.neo4j_password,
-    )
+def get_db() -> Database:  # FastAPI dependency
+    return Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
 
 
 DB = Annotated[Database, Depends(get_db)]

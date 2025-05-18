@@ -10,7 +10,7 @@ from backend.models.model import (
     Sheet,
     SheetConnection,
     SheetModel,
-    SheetReferences,
+    SheetReference,
 )
 
 
@@ -108,7 +108,7 @@ class SheetModelBuilder:
     def validate_relations(
         self,
         sheet_connections: List[SheetConnection],
-        sheet_references: List[SheetReferences],
+        sheet_references: List[SheetReference],
     ) -> List[str]:
         """Validates if the defined relations are consistent with the spreadsheet structure.
 
@@ -177,7 +177,7 @@ class SheetModelBuilder:
     def build_sheet_model(
         self,
         sheet_connections: List[SheetConnection],
-        sheet_references: List[SheetReferences],
+        sheet_references: List[SheetReference],
     ) -> SheetModel:
         """Builds the sheet model based on the excel file and the specified sheet connections and references.
 

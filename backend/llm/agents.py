@@ -1,17 +1,11 @@
-import os
 from typing import List
 
-import dotenv
 from agents import Agent, AgentOutputSchema, function_tool
 from loguru import logger
 from pydantic import BaseModel
 from pyenzyme import SmallMolecule
 
 from backend.services.database import get_db
-
-dotenv.load_dotenv()
-
-# --- Database Tools ---
 
 
 class MoleculeAttributes(BaseModel):
@@ -32,13 +26,6 @@ class DataTable(BaseModel):
 async def get_graph_schema():
     """Get the graph schema with information about labels, rel-types, property keys."""
     logger.info("Getting graph schema from DB")
-
-    uri = os.getenv("NEO4J_URI")
-    username = os.getenv("NEO4J_USERNAME")
-    password = os.getenv("NEO4J_PASSWORD")
-    if not uri or not username or not password:
-        raise ValueError("DB credentials not found in environment variables")
-
     return get_db().get_graph_info_dict
 
 
@@ -47,11 +34,6 @@ async def execute_query(query: str):
     """Execute a Cypher query and return the results.
     You can only use cypher queries that are allowed by the graph schema.
     """
-    uri = os.getenv("NEO4J_URI")
-    username = os.getenv("NEO4J_USERNAME")
-    password = os.getenv("NEO4J_PASSWORD")
-    if not uri or not username or not password:
-        raise ValueError("DB credentials not found in environment variables")
     logger.info(f"Executing query: {query}")
     return get_db().execute_query(query)
 
@@ -100,20 +82,26 @@ data_analysis_agent = Agent(
     instructions=(
         "You are a specialized agent for analyzing data from the database. "
         "You can only use information that is present in the database results. "
-        "First get information about the graph schema and then use the `execute_query` tool to get the data you need to analyze. "
-        "To see the data, you need to call the `execute_query` tool. "
+        "First get information using the `Cypher_Translator_Agent` to get the Cypher query and then use the `execute_query` tool to get the data you need to analyze. "
+        "To see the data, you need to call the `execute_query` tool! "
         "Provide a concise answer based on the data. Do not come up with analysis and conclusion if they are not backed by the data. "
     ),
-    tools=[get_graph_schema, execute_query],
+    tools=[
+        cypher_translator_agent.as_tool(
+            tool_name="Cypher_Translator_Agent",
+            tool_description="Translate natural language queries into Cypher queries.",
+        ),
+        execute_query,
+    ],
 )
 
 # Master agent that handles both queries and mapping
 master_agent = Agent(
     name="Master Agent",
     instructions=(
-        "You are a helpful assistant for a biochemical database. "
-        "If the user asks a question asking your opinion on the data, call the data analysis agent. "
-        "If the user requests data from the database, hand off to the cypher translator agent. "
+        "You are a specialized agent deciding whether to only retrieve data from the database or to do an analysis of the retrieved data. "
+        "If the user asks to get some data from the data base you should call the cypher translator agent. "
+        "If the user specifies data and asks you to look into the data, analyze the data, generate a report, or do data science, you should call the data analysis agent. "
     ),
     handoffs=[cypher_translator_agent, data_analysis_agent],
 )

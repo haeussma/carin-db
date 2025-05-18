@@ -25,7 +25,7 @@
     - Type: SheetConnection[]
     - Description: A list of connections between sheets
 - **sheet_references**
-    - Type: SheetReferences[]
+    - Type: SheetReference[]
     - Description: A list of references between sheets
 
 ### Sheet
@@ -61,7 +61,7 @@
     - Type: string
     - Description: The key field used to connect the sheets
 
-### SheetReferences
+### SheetReference
 
 - **source_sheet_name**
     - Type: string

@@ -48,7 +48,7 @@ export interface DatabaseInfo extends JsonLd {
 export interface SheetModel extends JsonLd {
   sheets: Sheet[];
   sheet_connections: SheetConnection[];
-  sheet_references: SheetReferences[];
+  sheet_references: SheetReference[];
 }
 
 // Sheet
@@ -92,7 +92,7 @@ export interface SheetConnection extends JsonLd {
  * @param target_sheet_name - The name of the target sheet
  * @param target_column_name - The name of the column in the target sheet
  */
-export interface SheetReferences extends JsonLd {
+export interface SheetReference extends JsonLd {
   source_sheet_name?: string | null;
   source_column_name?: string | null;
   target_sheet_name?: string | null;

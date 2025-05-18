@@ -3,6 +3,7 @@
 import SpreadsheetUploader from '@/components/spreadsheet-uploader';
 import DataTableCard from '@/components/data-table';
 import AskCard from '@/components/ask-card';
+import ChatPage from '@/components/realchat';
 
 export default function Page() {
   return (
@@ -22,6 +23,8 @@ export default function Page() {
         <section id="ask" className="w-full">
           <AskCard />
         </section> */}
+
+        <ChatPage />
       </div>
     </div>
   );

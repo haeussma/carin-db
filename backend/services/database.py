@@ -1,28 +1,66 @@
-from typing import Any
+import threading
+from typing import Annotated, Any
 
-from neo4j import Driver, GraphDatabase
+from fastapi import Depends
+from loguru import logger
+from neo4j import GraphDatabase
+from neo4j.exceptions import AuthError, ServiceUnavailable
 
-from .models import Attribute, DBStructure, Node, Relationship
+from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
+from backend.settings import config
+
+
+class DatabaseError(Exception):
+    """Base exception for database-related errors."""
+
+    pass
+
+
+class DatabaseConnectionError(DatabaseError):
+    """Raised when there are issues connecting to the database."""
+
+    pass
+
+
+class DatabaseAuthenticationError(DatabaseError):
+    """Raised when there are authentication issues."""
+
+    pass
 
 
 class Database:
-    def __init__(
-        self,
-        uri: str,
-        user: str,
-        password: str,
-    ):
-        self.uri = uri
-        self.user = user
-        self.driver = self.connect(uri, user, password)
+    _instance: "Database | None" = None
+    _lock = threading.Lock()
+    _initialized: bool = False
 
-    def close(self):
+    def __init__(self, uri: str, username: str, password: str):
+        self.uri = uri
+        self.username = username
+        self.password = password
+        self.driver = self._connect()
+        self._validate_connection()
+
+    def _connect(self):
+        return GraphDatabase.driver(self.uri, auth=(self.username, self.password))
+
+    def _validate_connection(self):
+        try:
+            with self.driver.session() as s:
+                s.run("RETURN 1").single()
+            logger.info("Neo4j connection OK")
+        except AuthError as e:
+            logger.error(f"Neo4j auth failed: {e}")
+            raise DatabaseAuthenticationError("Invalid Neo4j username or password.")
+        except ServiceUnavailable as e:
+            logger.error(f"Neo4j connection failed: {e}")
+            raise DatabaseConnectionError("Could not connect to the Neo4j database.")
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            raise DatabaseError("An unknown error occurred while connecting to Neo4j.")
+
+    def close(self) -> None:
         if self.driver:
             self.driver.close()
-
-    @staticmethod
-    def connect(uri: str, user: str, password: str) -> Driver:
-        return GraphDatabase.driver(uri, auth=(user, password))
 
     def execute_query(self, query: str):
         with self.driver.session() as session:
@@ -74,8 +112,8 @@ class Database:
             return [Relationship(**record["output"]) for record in response]
 
     @property
-    def get_db_structure(self) -> DBStructure:
-        return DBStructure(
+    def get_db_structure(self) -> GraphModel:
+        return GraphModel(
             nodes=self.node_properties,
             relationships=self.relationships,
         )
@@ -90,6 +128,7 @@ class Database:
 
         with self.driver.session() as session:
             nodes_data = session.run(node_query).data()
+
             nodes = [
                 Node(
                     name=node["name"],
@@ -116,8 +155,8 @@ class Database:
         return response[0]["labels"]
 
 
-if __name__ == "__main__":
-    from devtools import pprint
+def get_db() -> Database:  # FastAPI dependency
+    return Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
 
-    db = Database(uri="bolt://localhost:7692", user="neo4j", password="12345678")
-    pprint(db.node_count)
+
+DB = Annotated[Database, Depends(get_db)]

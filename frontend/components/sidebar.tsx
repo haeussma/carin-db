@@ -37,7 +37,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { SettingsDialog } from "@/components/settings-dialog";
 import {
     Sheet,
     SheetContent,
@@ -112,17 +111,7 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
             </SidebarContent>
             <SidebarRail />
             <SidebarFooter>
-                <div className="flex justify-between items-center p-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() => setShowSettings(true)}
-                        data-settings-button
-                    >
-                        <Settings className="h-4 w-4" />
-                        <span className="sr-only">Settings</span>
-                    </Button>
+                <div className="flex justify-end items-center p-2">
                     <Button
                         variant="ghost"
                         size="icon"
@@ -133,10 +122,6 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                     </Button>
                 </div>
             </SidebarFooter>
-            <SettingsDialog
-                open={showSettings}
-                onOpenChange={setShowSettings}
-            />
         </Sidebar>
     );
 }

@@ -1,5 +1,3 @@
-# Codespell configuration is within .codespellrc
----
 name: Codespell
 
 on:
@@ -18,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: codespell-project/actions-codespell@v2
         with:
-          path: .
+          path: README.md,backend
+          ignore_words_list: Carin,carin

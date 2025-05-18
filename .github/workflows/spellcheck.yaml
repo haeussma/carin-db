@@ -1,0 +1,25 @@
+# Codespell configuration is within .codespellrc
+---
+name: Codespell
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  codespell:
+    name: Check for spelling errors
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: codespell-project/actions-codespell@v2
+        name: Check for spelling errors
+        with:
+          source_files: README.md
+          task_name: Markdown

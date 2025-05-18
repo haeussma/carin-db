@@ -19,7 +19,3 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: codespell-project/actions-codespell@v2
-        name: Check for spelling errors
-        with:
-          source_files: README.md
-          task_name: Markdown

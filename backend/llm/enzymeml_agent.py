@@ -63,7 +63,7 @@ def remove_jsonld_fields(schema: dict) -> dict:
 SmallMoleculeAgent = Agent(
     name="Small Molecule Agent",
     instructions=f"""
-        You are a specialized agent for finding semantic matches between the desciption of a small molecule and the nodes and relationships in a Neo4j database that should be mapped to a SmallMolecule object.
+        You are a specialized agent for finding semantic matches between the description of a small molecule and the nodes and relationships in a Neo4j database that should be mapped to a SmallMolecule object.
         Your job is to check if in the Graph all mandatory information infomation is present to map to an instance of SmallMolecule.
         Here is the description of the SmallMolecule object:
         ```
@@ -81,7 +81,7 @@ SmallMoleculeAgent = Agent(
 EnzymeAgent = Agent(
     name="Enzyme Agent",
     instructions=f"""
-        You are a specialized agent for finding semantic matches between the desciption of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.
+        You are a specialized agent for finding semantic matches between the description of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.
         Your job is to check if in the Graph all mandatory information infomation is present to map to an instance of Enzyme.
         Here is the description of the Enzyme object:
         ```
@@ -98,7 +98,7 @@ EnzymeAgent = Agent(
 MeasurementAgent = Agent(
     name="Measurement Agent",
     instructions=f"""
-        You are a specialized agent for finding semantic matches between the desciption of a measurement and the nodes and relationships in a Neo4j database that should be mapped to a Measurement object.
+        You are a specialized agent for finding semantic matches between the description of a measurement and the nodes and relationships in a Neo4j database that should be mapped to a Measurement object.
         ```
         {remove_jsonld_fields(Measurement.model_json_schema())}
         ```
@@ -128,11 +128,11 @@ EnzymeMLMappingMasterAgent = Agent(
     tools=[
         SmallMoleculeAgent.as_tool(
             tool_name="Small_Molecule_Agent",
-            tool_description="Agent for finding semantic matches between the desciption of a small molecule and the nodes and relationships in a Neo4j database that should be mapped to a SmallMolecule object.",
+            tool_description="Agent for finding semantic matches between the description of a small molecule and the nodes and relationships in a Neo4j database that should be mapped to a SmallMolecule object.",
         ),
         EnzymeAgent.as_tool(
             tool_name="Enzyme_Agent",
-            tool_description="Agent for finding semantic matches between the desciption of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.",
+            tool_description="Agent for finding semantic matches between the description of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.",
         ),
     ],
     model=MODEL,

@@ -5,14 +5,15 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    ports:
-      - "8000:8000"
     volumes:
       - ./backend:/app/backend
       - ./.env:/app/.env
       - ./uploads:/app/uploads
     env_file:
       - .env
+    labels:
+      - traefik.http.routers.backend.rule=PathPrefix(`/api`)
+      - traefik.http.routers.backend.entrypoints=web
     depends_on:
       - neo4j
 
@@ -20,34 +21,53 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000/
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+    labels:
+      - traefik.http.routers.frontend.rule=PathPrefix(`/`)
+      - traefik.http.routers.frontend.entrypoints=web
     depends_on:
       - backend
 
   neo4j:
     image: neo4j:latest
-    ports:
-      - "7470:7474" # HTTP
-      - "7692:7687" # Bolt (changed to map external 7692 to internal 7687)
     environment:
       - NEO4J_AUTH=neo4j/12345678
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true
       - NEO4J_apoc_import_file_use__neo4j__config=true
       - NEO4J_PLUGINS=["apoc"]
+    labels:
+      - traefik.http.routers.neo4j.rule=PathPrefix(`/browser`)
+      - traefik.http.routers.neo4j.entrypoints=web
+      - traefik.http.services.neo4j.loadbalancer.server.port=7474
+
+      - traefik.tcp.routers.neo4j-bolt.rule=HostSNI(`*`)
+      - traefik.tcp.routers.neo4j-bolt.entrypoints=bolt
+      - traefik.tcp.services.neo4j-bolt.loadbalancer.server.port=7687
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - neo4j_plugins:/plugins
+
+  traefik:
+    image: traefik:latest
+    command:
+      - --api.insecure=true
+      - --providers.docker
+      - --entrypoints.web.address=:80
+      - --entrypoints.bolt.address=:7687
+    ports:
+      - "80:80"
+      - "8080:8080"
+      - "7687:7687"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   neo4j_data:

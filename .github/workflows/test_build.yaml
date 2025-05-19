@@ -1,0 +1,42 @@
+name: Docker Build Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Copy .env.example to .env
+      run: cp .env.example .env
+
+    - name: Build Docker services
+      run: docker compose build
+
+    - name: Start Docker services
+      run: docker compose up -d
+
+    - name: Backend Health Check
+      run: |
+        sleep 10
+        curl --fail http://localhost/api/health
+
+    - name: Database Health Check
+      run: |
+        sleep 10
+        curl --fail http://localhost/api/database/health
+
+    - name: Frontend Health Check
+      run: |
+        curl --fail http://localhost/home
+
+    - name: Traefik Dashboard Check
+      run: |
+        curl --fail http://localhost:8080/dashboard/

@@ -19,7 +19,6 @@ neo4j = "^5"
 xlsxwriter = "^3.2"
 openai-agents = "^0.0.15"
 pyenzyme = {git = "https://github.com/EnzymeML/PyEnzyme.git", rev = "v2-migration"}
-pydantic-ai = "^0.2.4"
 pydantic-settings = "^2"
 websockets = "^15.0.1"
 
@@ -37,4 +36,8 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.mypy]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pyenzyme"
 ignore_missing_imports = true

@@ -26,7 +26,7 @@ export default function ChatPage() {
 
     useEffect(() => {
         // Initialize WebSocket connection
-        const ws = new WebSocket("ws://localhost:8000/llm_chat");
+        const ws = new WebSocket("/api/llm_chat");
 
         ws.onopen = () => {
             console.log("Connected to WebSocket");

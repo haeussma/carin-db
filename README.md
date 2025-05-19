@@ -1,16 +1,22 @@
 # AI-Assisted Data Management Application
 
-An AI-assisted data management application with a Neo4j database backend and a Next.js frontend.
+[![Docker Build Test](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml/badge.svg)](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml)
+
+An AI-assisted data-management application with a Neo4j database backend and a Next.js frontend.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
-- [Spreadsheet Organization](#spreadsheet-organization)
 - [Setup & Installation](#setup--installation)
-  - [macOS/Linux](#macoslinux)
-  - [Windows](#windows)
+- [Spreadsheet Organization](#spreadsheet-organization)
+  - [Basic Structure](#basic-structure)
+  - [Data Types](#data-types)
+  - [Relationships](#relationships)
+- [Features](#features)
+  - [Chat with your data](#chat-with-your-data)
+  - [Use the Neo4j Browser](#use-the-neo4j-browser)
 - [Accessing the Services](#accessing-the-services)
 - [Troubleshooting](#troubleshooting)
-  - [Windows](#windows-1)
+  - [Windows](#windows)
   - [macOS](#macos)
   - [Common Issues](#common-issues)
 
@@ -38,7 +44,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
 2. Set up environment variables:
    ```bash
    # Copy the example environment file
-   cp env.example .env
+   cp .env.example .env
    
    # Edit the .env file to add your OpenAI API key
    nano .env  # or use any text editor
@@ -50,7 +56,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
 
 3. Start the application:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Windows
@@ -63,7 +69,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
 2. Set up environment variables:
    ```powershell
    # Copy the example environment file
-   copy env.example .env
+   copy .env.example .env
    
    # Edit the .env file to add your OpenAI API key
    notepad .env  # or use any text editor
@@ -75,27 +81,29 @@ An AI-assisted data management application with a Neo4j database backend and a N
 
 3. Start the application:
    ```powershell
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ## Accessing the Services
 
-Once the application is running, you can access:
+Once the application is running, open:
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Neo4j Browser: [http://localhost:7470](http://localhost:7470)
-- Backend API: [http://localhost:8000](http://localhost:8000)
+- Frontend → [http://localhost/home](http://localhost/home)
+- Neo4j Browser → [http://localhost/browser](http://localhost/browser)
+- Backend API Docs → [http://localhost/api/docs](http://localhost/api/docs)
 
-Or through Docker Desktop:
-1. Open Docker Desktop
-2. Go to "Containers"
-3. Find "carin-db"
-4. Click the port numbers to open in browser
+> [!NOTE]
+> The stack uses Traefik to route all traffic through port 80.  
+> Requests are automatically forwarded based on path:
+> - `/` → frontend
+> - `/api` → backend
+> - `/browser` → Neo4j UI  
+> Traefik configuration is defined via labels in [`docker-compose.yml`](./docker-compose.yml).
+
 
 To stop the application:
 ```bash
-docker-compose down        # Stop services
-docker-compose down -v     # Stop and remove data
+docker compose down
 ```
 
 ## Spreadsheet Organization
@@ -150,7 +158,7 @@ Consider the following example. We investigated two enzymes catalyzing different
 | Mol_C       | Molecule C  | InChIKey_3  |
 | Mol_D       | Molecule D  | InChIKey_4  |
 
-**Defined Relationships**
+**Define Relationships**
 
 - `Reaction`:has_substrate -> `Molecule`:name
 - `Reaction`:has_product -> `Molecule`:name
@@ -158,6 +166,83 @@ Consider the following example. We investigated two enzymes catalyzing different
 
 This creates a graph in the database. In case of reaction r1, all associated information is connected in the following way:
 ![Reaction r1](./figs/graph.png)
+
+## Features
+
+### Chat with your data
+You can ask any question on your data in natural language. When you especially want the model to look into your data, you can say so. Otherwise, the model only the data without looking into the graph.
+
+**Example Question**
+```md
+Look at my reaction data for r2, r4, r10, and r20. I need a data science report covering the following questions:
+
+- What are the substrates and products of these reactions? Draw a clear reaction scheme. 
+- Is the enzyme the same in all cases?
+- For which measurement did we observe the highest activity? 
+- Also, provide the corresponding raw measurements on which the activity is based.
+- Which reaction showed the highest overall activity, when averaging all observed values?
+- Which reaction had the lowest average standard deviation of activity?
+- Did the reactions differ in how the cell disruption process was carried out for each biocatalyst?
+```
+
+**Response**
+```md
+# Data Scientific Report
+
+## Reaction Scheme
+
+- **r2**  
+  - Substrates: dihydro coumaric acid  
+  - Products: dihydro coumaroyl CoA
+
+- **r4**  
+  - Substrates: cinnamic acid  
+  - Products: cinnamoyl CoA
+
+- **r10**  
+  - Substrates: 4-Aminocinnamic acid  
+  - Products: 4-Aminocinnamoyl CoA
+
+- **r20**  
+  - Substrates: 3-Hydroxy-4-ethoxycinnamic acid  
+  - Products: 3-Hydroxy-4-ethoxycinnamoyl CoA
+
+## Enzyme Consistency
+
+- All reactions ((r2), (r4), (r10), (r20)) utilize the same enzyme associated with the NCBI database gene.
+
+## Highest Activity Measurement
+
+- **Reaction:** r10
+- **Highest Activity Measurements:**
+  - Measurement 1: 0.4839 mU/mg  
+  - Measurement 2: 0.4988 mU/mg  
+  - Measurement 3: 0.4893 mU/mg  
+
+## Highest Average Activity
+
+- **Reaction:** r2  
+- **Average Activity:** 220.07 mU/mg  
+
+## Lowest Averaged Standard Deviation of Activity
+
+- **Reaction:** r10  
+- **Average Standard Deviation:** 0.63  
+
+## Cell Disruption Process
+
+- All reactions ((r2), (r4), (r10), (r20)) used sonication for the cell disruption process, indicating no difference in methodology across these reactions.
+```
+
+### Use the Neo4j Browser
+
+When navigating to the [Neo4j Browser](http://localhost/browser), you can explore the data in the database.
+Upon first access, log in with the following credentials:
+> - Host: `bolt://localhost:7687`
+> - Username: `neo4j`
+> - Password: `12345678`
+
+Here you have direct access to the database and can run Cypher queries to read and modify data. 
 
 ## Troubleshooting
 

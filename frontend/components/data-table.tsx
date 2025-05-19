@@ -123,7 +123,7 @@ export default function DataTableCard() {
         setResponse(null);
 
         try {
-            const response = await fetch('http://localhost:8000/api/llm/ask', {
+            const response = await fetch('/api/llm/ask', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(question)
@@ -163,7 +163,7 @@ export default function DataTableCard() {
         if (!response || response.model !== 'data_table') return;
 
         try {
-            const fileResponse = await fetch('http://localhost:8000/api/spreadsheet/generate', {
+            const fileResponse = await fetch('/api/spreadsheet/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ data: response.data })

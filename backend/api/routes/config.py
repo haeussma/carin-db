@@ -1,6 +1,7 @@
 import os
 
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 
 from backend.models.model import SheetModel
 
@@ -37,3 +38,19 @@ async def save_sheet_model(sheet_model: SheetModel):
 async def delete_sheet_model():
     """Deletes sheet model configuration from json file in uploads directory"""
     os.remove(SHEET_MODEL_PATH)
+
+
+@router.get("/test_schema", tags=["Config"])
+async def test_schema():
+    """Test the schema of the database"""
+    from pyenzyme.versions.v2 import SmallMolecule
+
+    data = SmallMolecule.model_json_schema()
+    logger.info(data)
+    return data
+
+
+if __name__ == "__main__":
+    from pyenzyme.versions.v2 import SmallMolecule
+
+    print(SmallMolecule.model_json_schema())

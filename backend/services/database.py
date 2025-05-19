@@ -1,5 +1,6 @@
 import threading
-from typing import Annotated, Any
+from collections import defaultdict
+from typing import Annotated, Any, List
 
 from fastapi import Depends
 from loguru import logger
@@ -119,26 +120,58 @@ class Database:
         )
 
     @property
-    def node_properties(self) -> list[Node]:
+    def node_properties(self) -> List[Node]:
         node_query = """
         CALL apoc.meta.nodeTypeProperties()
-        YIELD nodeType AS name, propertyName AS attribute, propertyTypes AS data_type
-        RETURN name, collect({name: attribute, data_type: data_type[0]}) AS attributes
+        YIELD
+        nodeType       AS rawLabel,
+        propertyName   AS attribute,
+        propertyTypes  AS data_types
+        // strip the leading ":" and all backticks from rawLabel
+        WITH
+        replace(substring(rawLabel, 2), "`", "") AS label,
+        attribute,
+        data_types[0] AS data_type
+
+        // for each declared property, try to find a matching node with a non-null value
+        OPTIONAL MATCH (n)
+        WHERE label IN labels(n)
+            AND n[attribute] IS NOT NULL
+
+        // group per (label,attribute) and collect up to one example
+        WITH
+        label,
+        attribute,
+        data_type,
+        collect(n[attribute]) AS examples
+
+        RETURN
+        label,
+        attribute       AS property,
+        data_type,
+        head(examples)  AS example     // will be NULL if examples=[]
+        ORDER BY
+        label, property;
         """
 
+        node_dict = defaultdict(list)
+        nodes = []
         with self.driver.session() as session:
-            nodes_data = session.run(node_query).data()
+            response = session.run(node_query).data()
 
-            nodes = [
-                Node(
-                    name=node["name"],
-                    attributes=[
-                        Attribute(name=attr["name"], data_type=attr["data_type"])
-                        for attr in node["attributes"]
-                    ],
+        # group by label and collect attributes
+        for entry in response:
+            node_dict[entry["label"]].append(
+                Attribute(
+                    attr_name=entry["property"],
+                    example_val=entry["example"],
+                    # attr_type=entry["data_type"],
                 )
-                for node in nodes_data
-            ]
+            )
+
+        # create nodes
+        for label, attributes in node_dict.items():
+            nodes.append(Node(name=label, attributes=attributes))
 
         return nodes
 

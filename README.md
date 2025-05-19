@@ -41,7 +41,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
 2. Set up environment variables:
    ```bash
    # Copy the example environment file
-   cp env.example .env
+   cp .env.example .env
    
    # Edit the .env file to add your OpenAI API key
    nano .env  # or use any text editor
@@ -66,7 +66,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
 2. Set up environment variables:
    ```powershell
    # Copy the example environment file
-   copy env.example .env
+   copy .env.example .env
    
    # Edit the .env file to add your OpenAI API key
    notepad .env  # or use any text editor

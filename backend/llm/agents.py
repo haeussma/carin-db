@@ -1,107 +1,181 @@
-from typing import List
+from agents import Agent
+from pyenzyme import Measurement, MeasurementData, Protein, SmallMolecule
 
-from agents import Agent, AgentOutputSchema, function_tool
-from loguru import logger
-from pydantic import BaseModel
-from pyenzyme import SmallMolecule
+from .models import EvaluationReport, MappingReport
+from .tools import execute_query, get_graph_schema, remove_jsonld_fields
 
-from backend.services.database import get_db
+MODEL = "gpt-4.1-2025-04-14"
 
-
-class MoleculeAttributes(BaseModel):
-    nodes: dict[str, list[str]]
-
-
-class EnzymeAttributes(BaseModel):
-    nodes: dict[str, list[str]]
-
-
-class DataTable(BaseModel):
-    node_name: str
-    attribute: str
-    values: list[str]
-
-
-@function_tool
-async def get_graph_schema():
-    """Get the graph schema with information about labels, rel-types, property keys."""
-    logger.info("Getting graph schema from DB")
-    return get_db().get_graph_info_dict
-
-
-@function_tool
-async def execute_query(query: str):
-    """Execute a Cypher query and return the results.
-    You can only use cypher queries that are allowed by the graph schema.
-    """
-    logger.info(f"Executing query: {query}")
-    return get_db().execute_query(query)
-
-
-molecule_attribute_agent = Agent(
-    name="Molecule Attribute Agent",
-    instructions=("You are a specialized in "),
-    tools=[get_graph_schema, execute_query],
-    output_type=AgentOutputSchema(
-        output_type=MoleculeAttributes, strict_json_schema=False
-    ),
+biochemistry_semantics_agent = Agent(
+    name="biochemistry_semantics_agent",
+    instructions="""
+        You are a specialized agent for finding semantic matches between different biochemical terms .
+        Other agents may approach you if uncertain wheter a term in its instructions matches another term. 
+        E.g. if an name of a protein is equivalent to the database name of a protein. (obviously not). But e.g. a `enzyme` is equivalent to a `protein`.
+        or a small molecule to a chemical substance or compound.
+        Keep your answer short and concise.
+    """,
+    model=MODEL,
 )
 
-# Small molecule mapping agent
+
+# ── Data Assessment Agents (is atomic information for EnzymeML present in the database)
 small_molecule_agent = Agent(
-    name="Small Molecule Mapper",
-    instructions=(
-        "You are a specialized agent for mapping database information to SmallMolecule objects. "
-        "You need to call the `get_graph_schema` tool to get the graph schema "
-        "and then use the `execute_query` tool to get the data you need to map. "
-        "You can only use information that is present in the database results. "
-        "For the ID field, you can use an abbreviation of the molecule name (e.g., 'glc' for 'glucose')."
-        "Never fill out the fields `@id`, `@type`, or `@context`."
-        "If multiple molecules are asked for, you need to return a list of SmallMolecule objects. Adjust the cypher query accordingly."
-    ),
-    output_type=AgentOutputSchema(
-        output_type=List[SmallMolecule], strict_json_schema=False
-    ),
+    name="small_molecule_agent",
+    instructions=f"""
+        You are a specialized agent for mapping database information to SmallMolecule objects. 
+        Here is the description of the SmallMolecule object:
+        ```
+        {remove_jsonld_fields(SmallMolecule.model_json_schema())}
+        ```
+        You need to call the `get_graph_schema` tool to get the graph schema 
+        and then use the `execute_query` tool to get the data you need to map. 
+        You can only use information that is present in the database results. 
+        For the ID field, you can use an abbreviation of the molecule name (e.g., 'glc' for 'glucose').
+        Never fill out the fields `@id`, `@type`, or `@context`.
+        If multiple molecules are asked for, you need to return a list of SmallMolecule objects. Adjust the cypher query accordingly.
+    """,
+    model=MODEL,
+    output_type=MappingReport,
     tools=[get_graph_schema, execute_query],
 )
+
+
+protein_agent = Agent(
+    name="protein_agent",
+    instructions=f"""
+        You are a specialized agent for finding semantic matches between the description of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.
+        Your job is to check if in the Graph all mandatory information infomation is present to map to an instance of Enzyme.
+        Here is the description of the Enzyme object:
+        ```
+        {remove_jsonld_fields(Protein.model_json_schema())}
+        ```
+        If you cannot find a match for the `id` field, you can use the content that fits the `name` field for the `id` field.
+        So this isnt't a show stopper.
+    """,
+    model=MODEL,
+    tools=[get_graph_schema],
+    output_type=MappingReport,
+)
+
+
+measurement_agent = Agent(
+    name="measurement_agent",
+    instructions=f"""
+        You are a specialized agent for finding finding the correct mappings for a Measurement object.
+        The object contains a nested object of MeasurementData. Don't consider it. That's the job of another agent.
+        Here is the description of the Measurement object:
+        ```
+        {remove_jsonld_fields(Measurement.model_json_schema())}
+        ```
+        If you cannot find a match for the `id` field, you can use the content that fits the `name` field. And vice versa.
+    """,
+    model=MODEL,
+    tools=[get_graph_schema],
+    output_type=MappingReport,
+)
+
+measurement_data_agent = Agent(
+    name="measurement_data_agent",
+    instructions=f"""
+        You are a specialized agent for finding the correct mappings for a MeasurementData object.
+        Here is the description of the MeasurementData object:
+        ```
+        {remove_jsonld_fields(MeasurementData.model_json_schema())}
+        ```
+    """,
+    model=MODEL,
+    tools=[get_graph_schema],
+    output_type=MappingReport,
+)
+
+mapping_evaluation_agent = Agent(
+    name="mapping_evaluation_agent",
+    instructions="""
+        You are a specialized agent for evaluating the reports of the individual agents.
+        Your job is to decide if the mapping are reasonable.
+        You can change the reports if neccessary in accordance with the biochemistry_semantics_agent.
+        You can also get the graph schema to understand the graph using the `get_graph_schema` tool.
+        You need to evaluate the mapping and return your final report.
+    """,
+    model=MODEL,
+    output_type=EvaluationReport,
+    tools=[
+        biochemistry_semantics_agent.as_tool(
+            tool_name="biochemistry_semantics_agent",
+            tool_description="A tool to clarify ambiguous mappings.",
+        ),
+        get_graph_schema,
+    ],
+)
+
+# ── Data Analysis Agents
+
 
 cypher_translator_agent = Agent(
-    name="Cypher Translator Agent",
+    name="cypher_translator_agent",
     instructions=(
         "You are a specialized agent for translating natural language queries into Cypher queries. "
-        "You can only use use nodes and relationships that are allowed by the graph schema. "
-        "You need to call the `get_graph_schema` tool to get the graph schema "
+        "You can only use nodes and relationships that are allowed by the graph schema. "
+        "Otherwise the query will fail."
+        "You need to call the `get_graph_schema` tool first to get the graph schema on which you can base query design."
         "When writing the MATCH clause, use the full node names from the graph schema. E.g. instead of MATCH (e:ExampleNode) use MATCH (ExampleNode:ExampleNode). "
         "return only the Cypher query, do not include any other text. "
     ),
     tools=[get_graph_schema],
+    model=MODEL,
 )
 
+
 data_analysis_agent = Agent(
-    name="Data Analysis Agent",
-    instructions=(
-        "You are a specialized agent for analyzing data from the database. "
-        "You can only use information that is present in the database results. "
-        "First get information using the `Cypher_Translator_Agent` to get the Cypher query and then use the `execute_query` tool to get the data you need to analyze. "
-        "To see the data, you need to call the `execute_query` tool! "
-        "Provide a concise answer based on the data. Do not come up with analysis and conclusion if they are not backed by the data. "
-    ),
+    name="data_analysis_agent",
+    instructions="""
+        You are a specialized agent for biochemical data analysis.
+
+        You always need follow the following steps:
+        1. Rephrase the question into a Cypher query. Consult the `Cypher_Translator_Agent`.
+        2. Execute the query and get the data by calling the `execute_query` tool to get the data.
+        3. Create a report based on the data.
+            a. Summerize the data in a concise way.
+            b. Answer specific questions about the data asked by the user.
+
+        Note:
+        - The report needs to fully be founded on the data. Do not come up with analysis and conclusion if they are not backed by the data. 
+        - Don't make up data. If you don't have the data, say so.
+    """,
     tools=[
         cypher_translator_agent.as_tool(
-            tool_name="Cypher_Translator_Agent",
-            tool_description="Translate natural language queries into Cypher queries.",
+            tool_name="cypher_translator_agent",
+            tool_description="A tool for translating natural language queries into Cypher queries.",
         ),
         execute_query,
     ],
+    model=MODEL,
 )
 
-# Master agent that handles both queries and mapping
-master_agent = Agent(
-    name="Master Agent",
-    instructions=(
-        "You are a specialized agent deciding whether to only retrieve data from the database or to do an analysis of the retrieved data. "
-        "If the user asks to get some data from the data base you should call the cypher translator agent. "
-        "If the user specifies data and asks you to look into the data, analyze the data, generate a report, or do data science, you should call the data analysis agent. "
-    ),
+
+question_dispatcher_agent = Agent(
+    name="question_dispatcher_agent",
+    instructions="""
+        You are a specialized agent that dispatches tasks to the appropriate agents
+        based on the user's question.
+
+        There following agents are available:
+        - Cypher_Translator_Agent
+            - Call this agent if the user does not specifically ask to analyze data.
+            - Call this agent for phrases similar or equivalent to:
+                - Give me the data for ...
+                - I need ...
+                - Is there data for ...
+        - Data_Analysis_Agent
+            - Call this agent if the user asks to analyze data.
+            - Call this agent for phrases similar or equivalent to:
+                - Analyze the data for ...
+                - Look into my data ...
+                - Is there a connection between ...
+                - Do you spot ...
+                - Give me a summary of ...
+    """,
+    model=MODEL,
     handoffs=[cypher_translator_agent, data_analysis_agent],
 )

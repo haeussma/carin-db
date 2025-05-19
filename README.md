@@ -4,10 +4,13 @@ An AI-assisted data management application with a Neo4j database backend and a N
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
-- [Spreadsheet Organization](#spreadsheet-organization)
 - [Setup & Installation](#setup--installation)
-  - [macOS/Linux](#macoslinux)
-  - [Windows](#windows)
+- [Spreadsheet Organization](#spreadsheet-organization)
+  - [Basic Structure](#basic-structure)
+  - [Data Types](#data-types)
+  - [Relationships](#relationships)
+- [Features](#features)
+  - [Chat with your data](#chat-with-your-data)
 - [Accessing the Services](#accessing-the-services)
 - [Troubleshooting](#troubleshooting)
   - [Windows](#windows-1)
@@ -150,7 +153,7 @@ Consider the following example. We investigated two enzymes catalyzing different
 | Mol_C       | Molecule C  | InChIKey_3  |
 | Mol_D       | Molecule D  | InChIKey_4  |
 
-**Defined Relationships**
+**Define Relationships**
 
 - `Reaction`:has_substrate -> `Molecule`:name
 - `Reaction`:has_product -> `Molecule`:name
@@ -158,6 +161,71 @@ Consider the following example. We investigated two enzymes catalyzing different
 
 This creates a graph in the database. In case of reaction r1, all associated information is connected in the following way:
 ![Reaction r1](./figs/graph.png)
+
+## Features
+
+### Chat with your data
+You can ask any question on your data in natural language.
+```md
+Look at my reaction data for r2, r4, r10, and r20. I need a data science report covering the following questions:
+
+- What are the substrates and products of these reactions? Draw a clear reaction scheme. 
+- Is the enzyme the same in all cases?
+- For which measurement did we observe the highest activity? 
+- Also, provide the corresponding raw measurements on which the activity is based.
+- Which reaction showed the highest overall activity, when averaging all observed values?
+- Which reaction had the lowest average standard deviation of activity?
+- Did the reactions differ in how the cell disruption process was carried out for each biocatalyst?
+```
+
+**Response**
+```md
+# Data Scientific Report
+
+## Reaction Scheme
+
+- **r2**  
+  - Substrates: dihydro coumaric acid  
+  - Products: dihydro coumaroyl CoA
+
+- **r4**  
+  - Substrates: cinnamic acid  
+  - Products: cinnamoyl CoA
+
+- **r10**  
+  - Substrates: 4-Aminocinnamic acid  
+  - Products: 4-Aminocinnamoyl CoA
+
+- **r20**  
+  - Substrates: 3-Hydroxy-4-ethoxycinnamic acid  
+  - Products: 3-Hydroxy-4-ethoxycinnamoyl CoA
+
+## Enzyme Consistency
+
+- All reactions ((r2), (r4), (r10), (r20)) utilize the same enzyme associated with the NCBI database gene.
+
+## Highest Activity Measurement
+
+- **Reaction:** r10
+- **Highest Activity Measurements:**
+  - Measurement 1: 0.4839 mU/mg  
+  - Measurement 2: 0.4988 mU/mg  
+  - Measurement 3: 0.4893 mU/mg  
+
+## Highest Average Activity
+
+- **Reaction:** r2  
+- **Average Activity:** 220.07 mU/mg  
+
+## Lowest Averaged Standard Deviation of Activity
+
+- **Reaction:** r10  
+- **Average Standard Deviation:** 0.63  
+
+## Cell Disruption Process
+
+- All reactions ((r2), (r4), (r10), (r20)) used sonication for the cell disruption process, indicating no difference in methodology across these reactions.
+```
 
 ## Troubleshooting
 

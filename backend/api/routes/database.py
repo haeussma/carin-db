@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter
 
 from backend.models.graph_model import GraphModel
@@ -17,6 +19,12 @@ async def get_database_status(db: DB) -> dict[str, int]:
 async def get_database_structure(db: DB) -> GraphModel:
     """Get the structure of the database."""
     return db.get_db_structure
+
+
+@router.get("/node_properties", tags=["Database"])
+async def get_node_properties(db: DB) -> Any:
+    """Get the node properties of the database."""
+    return db.node_properties
 
 
 @router.delete("/delete_all", tags=["Database"])

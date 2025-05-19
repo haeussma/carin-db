@@ -1,9 +1,24 @@
-from pydantic import BaseModel, Field
+from typing import Optional, Union
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class Attribute(BaseModel):
-    name: str
-    data_type: str
+    attr_name: str = Field(..., description="Attribute name")
+    example_val: Optional[Union[str, int, float]] = Field(
+        None,
+        description="A sample value (or None if no example exists)",
+    )
+    # attr_type: str = Field(..., description="Declared data type")
+
+    @field_validator("example_val")
+    @classmethod
+    def truncate_example(
+        cls, v: Optional[Union[str, int, float]]
+    ) -> Union[str, int, float, None]:
+        if isinstance(v, str) and len(v) > 20:
+            return v[:20] + "..."
+        return v
 
 
 class Node(BaseModel):

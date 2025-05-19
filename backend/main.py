@@ -2,25 +2,15 @@ import json
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TypedDict
+from typing import TypedDict
 
-from agents import (
-    InputGuardrailTripwireTriggered,
-    MaxTurnsExceeded,
-    OutputGuardrailTripwireTriggered,
-    Runner,
-    RunResult,
-)
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from backend.llm.orchestrator import AgentOrchestrator
+
 from .api.routes import config, database, llm, spreadsheet
-from .llm.enzymeml_agent import (
-    AmbiguityClarifierAgent,
-    EnzymeMLMappingMasterAgent,
-    MappingBossReport,
-)
 
 
 @asynccontextmanager
@@ -60,10 +50,9 @@ class WebSocketMessage(TypedDict):
 
 @dataclass
 class ChatState:
-    current_run: Optional[RunResult] = None
-    context: Optional[Dict[str, Any]] = field(default_factory=dict)
+    orchestrator: AgentOrchestrator = field(default_factory=AgentOrchestrator)
     turn_count: int = 0
-    max_turns: int = 5  # Limit the number of turns to prevent infinite loops
+    max_turns: int = 3  # Limit the number of turns to prevent infinite loops
 
 
 @app.websocket("/llm_chat")
@@ -95,120 +84,22 @@ async def llm_chat(websocket: WebSocket):
                 message: WebSocketMessage = json.loads(raw_message)
                 logger.info(f"Received message from client: {message}")
 
-                # Initialize or continue the agent run
-                try:
-                    if chat_state.current_run is None:
-                        # Start new run
-                        chat_state.current_run = await Runner.run(
-                            starting_agent=EnzymeMLMappingMasterAgent,
-                            input=message["content"],
-                            context=chat_state.context,
-                            max_turns=chat_state.max_turns,
-                        )
-                        logger.info(
-                            f"Starting new of {chat_state.current_run.last_agent.name}"
-                        )
-                        chat_state.turn_count += 1
-                    else:
-                        logger.error(
-                            f"Continuing existing run of {chat_state.current_run.last_agent.name}"
-                        )
-                        # Continue existing run
-                        chat_state.current_run = await Runner.run(
-                            starting_agent=EnzymeMLMappingMasterAgent,
-                            input=message["content"],
-                            context=chat_state.context,
-                            previous_response_id=chat_state.current_run.last_response_id,
-                            max_turns=chat_state.max_turns,
-                        )
-
-                except MaxTurnsExceeded as e:
-                    logger.error(f"Agent exceeded maximum turns: {str(e)}")
-                    # dump error to json
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "content": f"Agent exceeded maximum turns: {str(e)}",
-                            }
-                        )
-                    )
-                    await websocket.close(code=1000)
-                    break
-
-                except (
-                    InputGuardrailTripwireTriggered,
-                    OutputGuardrailTripwireTriggered,
-                ) as e:
-                    logger.error(f"Agent triggered guardrail: {str(e)}")
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "content": f"Failed to complete mapping: {str(e)}",
-                            }
-                        )
-                    )
-                    await websocket.close(code=1000)
-                    break
-
-                except Exception as e:
-                    logger.error(f"Agent error: {str(e)}")
-                    await websocket.send_text(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "content": f"An unknown error occurred while processing your request: {str(e)}",
-                            }
-                        )
-                    )
-                    await websocket.close(code=1000)
-                    break
-
+                # Run evaluation using orchestrator
+                reports = await chat_state.orchestrator.evaluate(message["content"])
                 chat_state.turn_count += 1
-
-                # Process the response
-                if chat_state.current_run.final_output:
-                    if isinstance(
-                        chat_state.current_run.final_output, MappingBossReport
-                    ):
-                        response = {
-                            "type": "final",
-                            "content": str(
-                                chat_state.current_run.final_output.verdict_report
-                            ),
-                        }
-
-                        boss_response: MappingBossReport = (
-                            chat_state.current_run.final_output
-                        )
-                        if boss_response.ambiguous:
-                            logger.info(
-                                f"Ambiguous mapping, calling ambiguity clarifier. Context: {chat_state.context}"
-                            )
-                            # call ambiguity clarifier agent
-                            chat_state.current_run = await Runner.run(
-                                starting_agent=AmbiguityClarifierAgent,
-                                input=message["content"],
-                                context=chat_state.context,
-                                previous_response_id=chat_state.current_run.last_response_id,
-                            )
-                    else:
-                        # Agent needs more input or tool execution
-                        response = {
-                            "type": "intermediate",
-                            "content": str(chat_state.current_run.last_response_id),
-                            "needs_input": "true",
-                        }
+                logger.info(f"Received reports: {reports}")
 
                 # Send response back to client
+                response = {
+                    "type": "final",
+                    "content": str(reports.report),
+                }
                 await websocket.send_text(json.dumps(response))
                 logger.info(f"Sent response: {response}")
 
-                # If we got a final response, close the connection
-                if response["type"] == "final":
-                    await websocket.close(code=1000)
-                    break
+                # Close the connection after sending final response
+                await websocket.close(code=1000)
+                break
 
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON message: {str(e)}")

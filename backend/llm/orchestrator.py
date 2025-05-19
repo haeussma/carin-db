@@ -37,7 +37,7 @@ class AgentOrchestrator:
             protein_agent,
             measurement_agent,
             measurement_data_agent,
-        ]:
+        ][:2]:
             logger.info(f"Running {agent.name}...")
             result = await Runner.run(
                 starting_agent=agent,

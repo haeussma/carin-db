@@ -13,6 +13,7 @@ An AI-assisted data-management application with a Neo4j database backend and a N
   - [Relationships](#relationships)
 - [Features](#features)
   - [Chat with your data](#chat-with-your-data)
+  - [Use the Neo4j Browser](#use-the-neo4j-browser)
 - [Accessing the Services](#accessing-the-services)
 - [Troubleshooting](#troubleshooting)
   - [Windows](#windows)
@@ -87,9 +88,9 @@ An AI-assisted data-management application with a Neo4j database backend and a N
 
 Once the application is running, you can access:
 
-- Frontend → [http://localhost:3000](http://localhost:3000)
-- Neo4j Browser → [http://localhost:7470](http://localhost:7470)
-- Backend API → [http://localhost:8000](http://localhost:8000)
+- Frontend → [http://localhost/home](http://localhost/home)
+- Neo4j Browser → [http://localhost/browser](http://localhost/browser)
+- Backend API Documentation → [http://localhost/api/docs](http://localhost/api/docs) (Swagger UI)
 
 > [!NOTE]
 >The stack ships with a Traefik reverse-proxy so you only need the URLs above.
@@ -169,7 +170,9 @@ This creates a graph in the database. In case of reaction r1, all associated inf
 ## Features
 
 ### Chat with your data
-You can ask any question on your data in natural language.
+You can ask any question on your data in natural language. When you especially want the model to look into your data, you can say so. Otherwise, the model only the data without looking into the graph.
+
+**Example Question**
 ```md
 Look at my reaction data for r2, r4, r10, and r20. I need a data science report covering the following questions:
 
@@ -230,6 +233,16 @@ Look at my reaction data for r2, r4, r10, and r20. I need a data science report 
 
 - All reactions ((r2), (r4), (r10), (r20)) used sonication for the cell disruption process, indicating no difference in methodology across these reactions.
 ```
+
+### Use the Neo4j Browser
+
+When navigating to the [Neo4j Browser](http://localhost/browser), you can explore the data in the database.
+Upon first access, log in with the following credentials:
+> - Host: `bolt://localhost:7687`
+> - Username: `neo4j`
+> - Password: `12345678`
+
+Here you have direct access to the database and can run Cypher queries to read and modify data. 
 
 ## Troubleshooting
 

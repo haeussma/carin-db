@@ -100,7 +100,7 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                         {/* Visualize */}
                         <SidebarMenuItem>
                             <SidebarMenuButton asChild isActive={isActive("/visualize")} tooltip="Visualize">
-                                <Link href="/visualize">
+                                <Link href="/browser" target="_blank">
                                     <BarChart2 />
                                     <span>Visualize</span>
                                 </Link>

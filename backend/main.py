@@ -25,7 +25,12 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down FastAPI application")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
 
 @app.get("/api/health")

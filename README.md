@@ -56,7 +56,7 @@ An AI-assisted data-management application with a Neo4j database backend and a N
 
 3. Start the application:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ### Windows
@@ -81,29 +81,29 @@ An AI-assisted data-management application with a Neo4j database backend and a N
 
 3. Start the application:
    ```powershell
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ## Accessing the Services
 
-Once the application is running, you can access:
+Once the application is running, open:
 
 - Frontend → [http://localhost/home](http://localhost/home)
 - Neo4j Browser → [http://localhost/browser](http://localhost/browser)
-- Backend API Documentation → [http://localhost/api/docs](http://localhost/api/docs) (Swagger UI)
+- Backend API Docs → [http://localhost/api/docs](http://localhost/api/docs)
 
 > [!NOTE]
->The stack ships with a Traefik reverse-proxy so you only need the URLs above.
-> Under the hood Traefik listens on port 80 (web), 8080 (dashboard) and 7687 (Neo4j Bolt) and routes requests like this:
+> The stack uses Traefik to route all traffic through port 80.  
+> Requests are automatically forwarded based on path:
 > - `/` → frontend
 > - `/api` → backend
-> - `/browser` → Neo4j Browser
->
-> The reverse proxy is configured in the [`docker-compose.yml`](./docker-compose.yml) file using Traefik labels.
+> - `/browser` → Neo4j UI  
+> Traefik configuration is defined via labels in [`docker-compose.yml`](./docker-compose.yml).
+
 
 To stop the application:
 ```bash
-docker-compose down        # Stop services
+docker compose down
 ```
 
 ## Spreadsheet Organization

@@ -30,6 +30,7 @@ jobs:
 
     - name: Database Health Check
       run: |
+        sleep 10
         curl --fail http://localhost:8000/api/database/health
 
     - name: Frontend Health Check

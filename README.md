@@ -1,5 +1,7 @@
 # AI-Assisted Data Management Application
 
+[![Docker Build Test](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml/badge.svg)](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml)
+
 An AI-assisted data management application with a Neo4j database backend and a Next.js frontend.
 
 ## Table of Contents

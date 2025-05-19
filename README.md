@@ -91,7 +91,8 @@ Once the application is running, you can access:
 - Neo4j Browser → [http://localhost:7470](http://localhost:7470)
 - Backend API → [http://localhost:8000](http://localhost:8000)
 
-> **Note:** The stack ships with a built-in Traefik reverse-proxy so you only need the URLs above.
+> [!NOTE]
+>The stack ships with a Traefik reverse-proxy so you only need the URLs above.
 > Under the hood Traefik listens on port 80 (web), 8080 (dashboard) and 7687 (Neo4j Bolt) and routes requests like this:
 > - `/` → frontend
 > - `/api` → backend

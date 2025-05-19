@@ -19,3 +19,14 @@ jobs:
 
     - name: Build Docker services
       run: docker compose build
+
+    - name: Start Docker services
+      run: docker compose up -d
+
+    - name: Backend Health Check
+      run: |
+        sleep 10
+        curl --fail http://localhost:8000/api/health
+
+    - name: Stop Docker services
+      run: docker compose down

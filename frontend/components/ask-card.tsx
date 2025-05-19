@@ -29,7 +29,7 @@ export default function AskCard() {
         setIsSubmitting(true);
 
         try {
-            const response = await fetch('http://localhost:8000/api/ask', {
+            const response = await fetch('/api/ask', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

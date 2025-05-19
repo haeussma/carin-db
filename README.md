@@ -2,7 +2,7 @@
 
 [![Docker Build Test](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml/badge.svg)](https://github.com/haeussma/carin-db/actions/workflows/test_build.yaml)
 
-An AI-assisted data management application with a Neo4j database backend and a Next.js frontend.
+An AI-assisted data-management application with a Neo4j database backend and a Next.js frontend.
 
 ## Table of Contents
 - [Prerequisites](#prerequisites)
@@ -15,7 +15,7 @@ An AI-assisted data management application with a Neo4j database backend and a N
   - [Chat with your data](#chat-with-your-data)
 - [Accessing the Services](#accessing-the-services)
 - [Troubleshooting](#troubleshooting)
-  - [Windows](#windows-1)
+  - [Windows](#windows)
   - [macOS](#macos)
   - [Common Issues](#common-issues)
 
@@ -87,20 +87,21 @@ An AI-assisted data management application with a Neo4j database backend and a N
 
 Once the application is running, you can access:
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Neo4j Browser: [http://localhost:7470](http://localhost:7470)
-- Backend API: [http://localhost:8000](http://localhost:8000)
+- Frontend → [http://localhost:3000](http://localhost:3000)
+- Neo4j Browser → [http://localhost:7470](http://localhost:7470)
+- Backend API → [http://localhost:8000](http://localhost:8000)
 
-Or through Docker Desktop:
-1. Open Docker Desktop
-2. Go to "Containers"
-3. Find "carin-db"
-4. Click the port numbers to open in browser
+> **Note:** The stack ships with a built-in Traefik reverse-proxy so you only need the URLs above.
+> Under the hood Traefik listens on port 80 (web), 8080 (dashboard) and 7687 (Neo4j Bolt) and routes requests like this:
+> - `/` → frontend
+> - `/api` → backend
+> - `/browser` → Neo4j Browser
+>
+> The reverse proxy is configured in the [`docker-compose.yml`](./docker-compose.yml) file using Traefik labels.
 
 To stop the application:
 ```bash
 docker-compose down        # Stop services
-docker-compose down -v     # Stop and remove data
 ```
 
 ## Spreadsheet Organization

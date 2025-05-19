@@ -1,6 +1,5 @@
 import uuid
 from enum import Enum
-from typing import Any
 
 from agents import Runner
 from loguru import logger
@@ -14,8 +13,6 @@ from backend.llm.agents import (
 )
 from backend.llm.models import EvaluationReport
 
-CONTEXT: list[dict[str, Any]] = []
-
 
 class Phase(str, Enum):
     EVALUATE = "map"
@@ -28,7 +25,7 @@ class Phase(str, Enum):
 class AgentOrchestrator:
     def __init__(self):
         self.phase = Phase.EVALUATE
-        self.context = CONTEXT
+        self.context = []
         self.session_id = str(uuid.uuid4())
 
     async def evaluate(self, user_input: str) -> EvaluationReport:

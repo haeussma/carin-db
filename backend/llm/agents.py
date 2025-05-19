@@ -2,7 +2,7 @@ from agents import Agent
 from pyenzyme import Measurement, MeasurementData, Protein, SmallMolecule
 
 from .models import EvaluationReport, MappingReport
-from .tools import execute_query, get_graph_schema, remove_jsonld_fields
+from .tools import execute_query, get_graph_schema
 
 MODEL = "gpt-4.1-2025-04-14"
 
@@ -26,7 +26,7 @@ small_molecule_agent = Agent(
         You are a specialized agent for mapping database information to SmallMolecule objects. 
         Here is the description of the SmallMolecule object:
         ```
-        {remove_jsonld_fields(SmallMolecule.model_json_schema())}
+        {SmallMolecule.model_json_schema()}
         ```
         You need to call the `get_graph_schema` tool to get the graph schema 
         and then use the `execute_query` tool to get the data you need to map. 
@@ -48,7 +48,7 @@ protein_agent = Agent(
         Your job is to check if in the Graph all mandatory information infomation is present to map to an instance of Enzyme.
         Here is the description of the Enzyme object:
         ```
-        {remove_jsonld_fields(Protein.model_json_schema())}
+        {Protein.model_json_schema()}
         ```
         If you cannot find a match for the `id` field, you can use the content that fits the `name` field for the `id` field.
         So this isnt't a show stopper.
@@ -66,7 +66,7 @@ measurement_agent = Agent(
         The object contains a nested object of MeasurementData. Don't consider it. That's the job of another agent.
         Here is the description of the Measurement object:
         ```
-        {remove_jsonld_fields(Measurement.model_json_schema())}
+        {Measurement.model_json_schema()}
         ```
         If you cannot find a match for the `id` field, you can use the content that fits the `name` field. And vice versa.
     """,
@@ -81,7 +81,7 @@ measurement_data_agent = Agent(
         You are a specialized agent for finding the correct mappings for a MeasurementData object.
         Here is the description of the MeasurementData object:
         ```
-        {remove_jsonld_fields(MeasurementData.model_json_schema())}
+        {MeasurementData.model_json_schema()}
         ```
     """,
     model=MODEL,
@@ -179,3 +179,6 @@ question_dispatcher_agent = Agent(
     model=MODEL,
     handoffs=[cypher_translator_agent, data_analysis_agent],
 )
+
+if __name__ == "__main__":
+    print(SmallMolecule.model_json_schema())

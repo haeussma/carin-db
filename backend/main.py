@@ -37,7 +37,7 @@ async def health_check():
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,7 +62,7 @@ class ChatState:
     max_turns: int = 3  # Limit the number of turns to prevent infinite loops
 
 
-@app.websocket("/llm_chat")
+@app.websocket("/api/llm_chat")
 async def llm_chat(websocket: WebSocket):
     try:
         await websocket.accept()

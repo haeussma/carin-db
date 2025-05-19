@@ -1,5 +1,3 @@
-from typing import Any
-
 from agents import function_tool
 from loguru import logger
 
@@ -22,11 +20,3 @@ async def execute_query(query: str):
     """
     logger.debug(f"AGENT TOOL CALL: execute_query with query: {query}")
     return get_db().execute_query(query)
-
-
-# ---- Helper Functions ----
-
-
-def remove_jsonld_fields(schema: dict) -> dict[str, Any]:
-    """Remove @id, @type, and @context fields from the schema."""
-    return {k: v for k, v in schema.items() if k not in ["@id", "@type", "@context"]}

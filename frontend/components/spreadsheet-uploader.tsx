@@ -72,7 +72,7 @@ export default function SpreadsheetUploader() {
   const loadGraphModel = useCallback(async () => {
     setIsLoadingModel(true);
     try {
-      const response = await fetch("http://localhost:8000/api/config/sheet_model");
+      const response = await fetch("/api/config/sheet_model");
 
       // If we get a 404 or other error, it's fine for first-time uploads
       // Just log it and continue with empty model
@@ -149,7 +149,7 @@ export default function SpreadsheetUploader() {
     formData.append("file", droppedFile)
 
     try {
-      const uploadRes = await fetch("http://localhost:8000/api/spreadsheet/upload", {
+      const uploadRes = await fetch("/api/spreadsheet/upload", {
         method: "POST",
         body: formData,
       })
@@ -163,7 +163,7 @@ export default function SpreadsheetUploader() {
       console.log("File path is here:", file_path);
 
       const validateRes = await fetch(
-        `http://localhost:8000/api/spreadsheet/validate_spreadsheet?path=${encodeURIComponent(file_path)}`,
+        `/api/spreadsheet/validate_spreadsheet?path=${encodeURIComponent(file_path)}`,
         { method: "POST" }
       );
 
@@ -239,7 +239,7 @@ export default function SpreadsheetUploader() {
       };
 
       // First save the sheet model
-      const saveModelRes = await fetch("http://localhost:8000/api/config/sheet_model", {
+      const saveModelRes = await fetch("/api/config/sheet_model", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -256,7 +256,7 @@ export default function SpreadsheetUploader() {
       // log the file path about to be sent
       console.log("File path about to be sent:", filePath);
 
-      const processRes = await fetch("http://localhost:8000/api/spreadsheet/process", {
+      const processRes = await fetch("/api/spreadsheet/process", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,12 +1,21 @@
 from typing import Any
 
 from fastapi import APIRouter
+from loguru import logger
 
 from backend.models.graph_model import GraphModel
 
 from ...services.database import DB
 
 router = APIRouter(prefix="/database")
+
+
+@router.get("/health", tags=["Database"])
+async def get_database_health(db: DB) -> dict[str, str]:
+    """Get the current status of the database connection."""
+    response = db.execute_query("RETURN 'healthy'")
+    logger.info(f"Database health check response: {response}")
+    return response[0]
 
 
 @router.get("/status", tags=["Database"])

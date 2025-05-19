@@ -28,5 +28,17 @@ jobs:
         sleep 10
         curl --fail http://localhost:8000/api/health
 
+    - name: Database Health Check
+      run: |
+        sleep 10
+        curl --fail http://localhost:8000/api/database/health
+
+    - name: Frontend Health Check
+      run: |
+        sleep 10
+        curl --fail http://localhost:3000/home
+
+    - name: Database Health Check
+      run: |
     - name: Stop Docker services
       run: docker compose down

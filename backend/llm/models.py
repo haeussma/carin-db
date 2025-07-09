@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 class NodeAttribute(BaseModel):
     """A node attribute that is mapped to an object attribute."""
 
-    node_name: str = Field(description="The name of the node.")
+    node_name: str = Field(
+        description="The *full* name of the node. Not the short name. E.g. `Molecule` not `m`."
+    )
     node_attr: str = Field(description="The attribute name of the node.")
 
 
@@ -239,13 +241,13 @@ class SpeciesTraversal(BaseModel):
         description="Cypher of the traversal pattern to connect the measurement and or reaction to the species"
     )
     species_id: NodeAttribute = Field(
-        description="The node attribute that uniquely identifies the species"
+        description="The node attribute that uniquely identifies the species. Full node and attribute name!"
     )
     initial: NodeAttribute | None = Field(
-        description="The node attribute that contains the initial concentration of the species"
+        description="The node attribute that contains the initial concentration of the species. Full node and attribute name!"
     )
     data_unit: NodeAttribute | None = Field(
-        description="The node attribute that contains the unit of the data"
+        description="The node attribute that contains the unit of the data. Full node and attribute name!"
     )
     has_observed_data: None | QueryStrategy = Field(
         description="If the species has data that is dependent on another field/node/relationship, describe how to query it. Otherwise None."

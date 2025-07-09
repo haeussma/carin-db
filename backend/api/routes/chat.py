@@ -6,9 +6,16 @@ from typing import Optional
 from agents import Agent, Runner
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from loguru import logger
+from neo4j.exceptions import CypherSyntaxError
 from pydantic import BaseModel
+from pyenzyme import EnzymeMLDocument, Protein, SmallMolecule
 
 from ...llm.agents import (
+    ExistingMappingChoice,
+    cypher_fixer_agent,
+    data_extraction_agent,
+    data_mapping_agent,
+    mapping_choice_parser_agent,
     mapping_file_checker_agent,
     measurement_agent,
     protein_agent,
@@ -16,6 +23,7 @@ from ...llm.agents import (
     species_distinguisher_agent,
 )
 from ...llm.models import EnzymeMLMappings, MappingReport, SpeciesTraversalReport
+from ...services.database import get_db
 
 router = APIRouter(prefix="/chat")
 
@@ -35,6 +43,7 @@ class ConversationPhase(str, Enum):
     )
     FINALIZATION = "finalization"
     EXISTING_MAPPING_CHOICE = "existing_mapping_choice"
+    DATA_MAPPING = "data_mapping"  # Using existing mappings to extract data
 
 
 class MappingStatus(str, Enum):
@@ -112,6 +121,8 @@ class ChatState:
                 return self._generate_final_document()
             elif self.phase == ConversationPhase.EXISTING_MAPPING_CHOICE:
                 return await self._handle_existing_mapping_choice(user_input, websocket)
+            elif self.phase == ConversationPhase.DATA_MAPPING:
+                return await self._handle_data_mapping(user_input, websocket)
 
             return {"type": "error", "content": "Unknown phase"}
         except Exception as e:
@@ -143,7 +154,7 @@ class ChatState:
         # Define all agents to run
         agents = [
             small_molecule_agent,
-            # protein_agent,
+            protein_agent,
             measurement_agent,
         ]
 
@@ -179,7 +190,7 @@ class ChatState:
         # Define all agents to run
         agents = [
             small_molecule_agent,
-            # protein_agent,
+            protein_agent,
             measurement_agent,
         ]
 
@@ -820,15 +831,59 @@ This document contains:
 
         return {"type": "final", "content": final_content}
 
+    def _get_existing_mapping_summary(self) -> str:
+        """Generate a summary of existing mappings for data mapping context"""
+        summary_parts = []
+
+        # Add object mappings if available
+        if hasattr(self.mapping, "small_molecule") and self.mapping.small_molecule:
+            summary_parts.append("- SmallMolecule mappings available")
+        if hasattr(self.mapping, "protein") and self.mapping.protein:
+            summary_parts.append("- Protein mappings available")
+        if hasattr(self.mapping, "measurement") and self.mapping.measurement:
+            summary_parts.append("- Measurement mappings available")
+
+        # Add species mappings if available
+        if (
+            hasattr(self.mapping, "measurement_species")
+            and self.mapping.measurement_species
+        ):
+            summary_parts.append(
+                f"- {len(self.mapping.measurement_species)} species traversals available"
+            )
+
+        if not summary_parts:
+            return "No specific mappings found in existing file"
+
+        return "\n".join(summary_parts)
+
     async def _handle_existing_mapping_choice(
         self, user_input: str, websocket: Optional[WebSocket] = None
     ) -> dict:
-        """Handle user's choice to use existing mappings or run new ones."""
-        user_input_lower = user_input.lower().strip()
+        """Handle user's choice using enum-based parsing."""
 
-        if "use existing" in user_input_lower or any(
-            word in user_input_lower for word in ["use", "existing", "load", "keep"]
-        ):
+        # Use the mapping choice parser agent to determine user intent
+        try:
+            result = await Runner.run(
+                starting_agent=mapping_choice_parser_agent, input=user_input
+            )
+            choice_str = result.final_output.strip().lower()
+
+            # Convert to enum if possible
+            if choice_str == "use_existing":
+                choice = ExistingMappingChoice.USE_EXISTING
+            elif choice_str == "create_new":
+                choice = ExistingMappingChoice.CREATE_NEW
+            elif choice_str == "map_data":
+                choice = ExistingMappingChoice.MAP_DATA
+            else:
+                choice = None
+
+        except Exception as e:
+            logger.error(f"Error parsing user choice: {e}")
+            choice = None
+
+        if choice == ExistingMappingChoice.USE_EXISTING:
             logger.info("User chose to use existing mappings.")
             self.phase = ConversationPhase.FINALIZATION
 
@@ -841,10 +896,7 @@ Loading your previous EnzymeML mapping results and generating the final document
             final_result["content"] = f"{content}\n\n{final_result['content']}"
             return final_result
 
-        elif "create new" in user_input_lower or any(
-            word in user_input_lower
-            for word in ["new", "fresh", "start", "create", "overwrite"]
-        ):
+        elif choice == ExistingMappingChoice.CREATE_NEW:
             logger.info("User chose to create new mappings.")
 
             # Send working message to indicate analysis is starting
@@ -865,17 +917,156 @@ Loading your previous EnzymeML mapping results and generating the final document
                 self.original_user_input
             )
 
+        elif choice == ExistingMappingChoice.MAP_DATA:
+            logger.info("User chose to map data using existing mappings.")
+            self.phase = ConversationPhase.DATA_MAPPING
+
+            return await self._run_mapping_agents(user_input, websocket)
+
         else:
-            # User input doesn't match expected options, ask for clarification
+            # User input was unclear, ask for clarification
             return {
                 "type": "final",
                 "content": """❓ **Please choose one of the options:**
 
-- Type `use existing` to load and use the previous mapping results
-- Type `create new` to start fresh and create a new mapping
+1. **Use existing mapping** - Load the previous mapping and generate the final EnzymeML document
+2. **Create new mapping** - Start fresh and create a new mapping (this will overwrite the existing file)  
+3. **Map data with existing** - Use the existing mapping to extract data from your database
+
+**Please respond with:**
+- `use existing` for option 1
+- `create new` for option 2  
+- `map data` for option 3
 
 What would you like to do?""",
             }
+
+    async def _run_mapping_agents(
+        self, user_input: str, websocket: Optional[WebSocket] = None
+    ) -> dict:
+        """Run all mapping agents in parallel"""
+
+        mappings = self._load_enzymeml_mapping()
+
+        # run separate agents to extract information from graph
+        message = f"""
+        The user gave information what sub-data from the graph they want:
+        <user_input>
+        {user_input}
+        </user_input>
+
+        Thereof extract all data from the following nodes:
+        <nodes>
+        {mappings.small_molecule.attribute_mappings}
+        </nodes>
+        """
+
+        logger.info(f"Small molecule message: {message}")
+        small_molecule_query = await Runner.run(
+            starting_agent=data_extraction_agent, input=message
+        )
+        logger.info(f"Small molecule query: {small_molecule_query.final_output}")
+
+        # execute query
+        result = get_db().execute_query(small_molecule_query.final_output)
+        logger.info(f"Small molecule query result: {result}")
+        logger.info(f"Small molecule query type: {type(result)}")
+
+        logger.info(f"Small molecule query: {small_molecule_query.final_output}")
+
+        # map to small molecule
+        sm = []
+        for r in result:
+            # cast ID to string
+            r["id"] = str(r["id"])
+            sm.append(SmallMolecule(**r))
+
+        logger.info(f"Small molecule: {sm}")
+
+        # map protein
+        message = f"""
+        The user gave information what sub-data from the graph they want:
+        <user_input>
+        {user_input}
+        </user_input>
+
+        Thereof extract all data from the following nodes:
+        <nodes>
+        {mappings.protein.attribute_mappings}
+        </nodes>
+        """
+
+        logger.info(f"Protein message: {message}")
+        protein_query = await Runner.run(
+            starting_agent=data_extraction_agent, input=message
+        )
+
+        # execute query
+        try:
+            result = get_db().execute_query(protein_query.final_output)
+            logger.info(f"Protein query result: {result}")
+            logger.info(f"Protein query type: {type(result)}")
+            logger.info(f"Protein query: {protein_query.final_output}")
+        except CypherSyntaxError:
+            # run cypher refinement agent
+            logger.info("Protein query is not working, running cypher refinement agent")
+            result = await Runner.run(
+                starting_agent=cypher_fixer_agent, input=protein_query.final_output
+            )
+            result = get_db().execute_query(result.final_output)
+
+        # map to protein
+        p = []
+        for r in result:
+            # cast ID to string
+            r["id"] = str(r["id"])
+            p.append(Protein(**r))
+
+        logger.info(f"Protein: {p}")
+
+        doc = EnzymeMLDocument(
+            name="generated_enzymeml", small_molecules=sm, proteins=p
+        )
+
+        return {
+            "type": "final",
+            "content": doc.model_dump_json(),
+        }
+
+    async def _handle_data_mapping(
+        self, user_input: str, websocket: Optional[WebSocket] = None
+    ) -> dict:
+        """Handle data mapping interactions when user is using existing mappings to extract data"""
+
+        # Prepare context for data mapping agent
+        mapping_summary = self._get_existing_mapping_summary()
+
+        data_mapping_input = f"""
+        The user is in data mapping mode using existing EnzymeML mappings.
+        
+        Available mappings:
+        {mapping_summary}
+        
+        User request: {user_input}
+        
+        Help the user extract or work with data using these existing mappings.
+        You can use the graph schema and execute queries to help them.
+        """
+
+        try:
+            # Run data mapping agent
+            result = await Runner.run(
+                starting_agent=data_mapping_agent, input=data_mapping_input
+            )
+
+            return {
+                "type": "final",
+                "content": result.final_output,
+            }
+
+        except Exception as e:
+            logger.error(f"Error in data mapping: {str(e)}")
+            return {"type": "error", "content": f"Error in data mapping: {str(e)}"}
 
     def _get_recent_history(self, n_messages: int = 3) -> str:
         """Get recent conversation history"""
@@ -926,7 +1117,7 @@ async def llm_chat(websocket: WebSocket):
             json.dumps(
                 {
                     "type": "intermediate",
-                    "content": "Hello! I'm your **Interactive EnzymeML Mapping Assistant**.\n\nI'll run all mapping agents in parallel, then walk you through each result for approval.\n\nPlease describe your mapping task to get started.",
+                    "content": "Hello! I'm your **Interactive EnzymeML Mapping Assistant**.\n\n**What I can help you with:**\n- **Create new mappings** - Run all mapping agents and walk through results for approval\n- **Use existing mappings** - Load previous mapping results and generate final documents  \n- **Map data with existing** - Use existing mappings to extract data from your database\n\nIf you have an existing mapping file, I'll automatically detect it and give you options.\n\nPlease describe your mapping task to get started!",
                 }
             )
         )

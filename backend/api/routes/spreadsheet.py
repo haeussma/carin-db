@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from backend.models.model import SheetModel
 from backend.services.database import DB
 from backend.services.database_populator import DatabasePopulator
-from backend.services.sheet_extractor import SheetModelBuilder
+from backend.services.spreadsheet_validator import SpreadsheetValidator
 
 router = APIRouter(prefix="/spreadsheet")
 
@@ -105,7 +105,7 @@ async def validate_spreadsheet(path: str):
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found at path: {file_path}")
 
-        builder = SheetModelBuilder(path=file_path)
+        builder = SpreadsheetValidator(path=file_path)
         validation_errors = builder.validate_spreadsheet_data()
 
         if validation_errors:
@@ -182,7 +182,7 @@ async def process_spreadsheet(
 
         # Populate DB
         # load sheets from file
-        builder = SheetModelBuilder(path=file_path)
+        builder = SpreadsheetValidator(path=file_path)
         sheets = builder.sheets
         db_populator = DatabasePopulator(
             sheets=sheets,

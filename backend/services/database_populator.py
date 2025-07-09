@@ -340,7 +340,7 @@ class DatabasePopulator:
                     cypher_query = (
                         f"MATCH (s:{source_label} {{{key}: $key_value}}), "
                         f"(t:{target_label} {{{key}: $key_value}}) "
-                        f"MERGE (s)-[r:{connection.edge_name.upper()}]->(t)"
+                        f"MERGE (s)-[r:{connection.edge_name}]->(t)"
                     )
                     logger.debug(
                         f"Executing query: {cypher_query} with key_value={key_value}"
@@ -352,7 +352,7 @@ class DatabasePopulator:
                 logger.info(f"Creating relationships for reference: {reference}")
                 source_df = self.sheets[reference.source_sheet_name]
                 # Generate a relationship type; here we use the source column name.
-                relationship_type = reference.source_column_name.upper()
+                relationship_type = reference.source_column_name
 
                 logger.info(
                     f"Creating reference relationships: {reference.source_sheet_name}.{reference.source_column_name} -> "

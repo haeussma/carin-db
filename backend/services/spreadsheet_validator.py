@@ -14,7 +14,7 @@ from backend.models.model import (
 )
 
 
-class SheetModelBuilder:
+class SpreadsheetValidator:
     """Cleans and validates sheet data and defined connections and references."""
 
     def __init__(self, path: str):

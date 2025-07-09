@@ -1,19 +1,74 @@
 from agents import Agent
 from pyenzyme import Measurement, MeasurementData, Protein, SmallMolecule
 
-from .models import EvaluationReport, MappingReport
-from .tools import execute_query, get_graph_schema
+from .models import (
+    MappingReport,
+    SpeciesTraversalReport,
+)
+from .tools import GRAPH_SCHEMA_EXAMPLE, clean_json_ld, execute_query, get_graph_schema
 
-MODEL = "gpt-4.1-2025-04-14"
+MODEL = "o4-mini"
+
+OBJECT_MAPPING_PROCEDURE = """
+Procedure:
+1. Call the `get_graph_schema` tool to get the graph schema
+2. See if you can find mappings from the database to the object.
+3. In case of ambiguity, call the `biochemistry_semantics_agent` to clarify the mapping.
+4. If the mapping is still ambiguous, mark it as such.
+
+Rules:
+- Focus on `required` properties.
+- Optional properties should not be filled if not certain that the mapping is correct.
+"""
+
+simple_test_agent = Agent(
+    name="simple_test_agent",
+    instructions="""
+        You are a test agent.
+        You don't want to give long answers.
+        So you only ever answer with three words.
+    """,
+    model="gpt-3.5-turbo",
+    output_type=str,
+)
+
+mapping_file_checker_agent = Agent(
+    name="mapping_file_checker_agent",
+    instructions="""
+        You are a mapping file checker agent.
+        
+        Your job is to inform the user that an existing EnzymeML mapping file has been found
+        and ask them whether they want to use it or create a new mapping from scratch.
+        
+        Always respond in a clear, friendly format asking the user to choose between:
+        1. Using the existing mapping (which will skip all agent processing and go directly to the final document)
+        2. Creating a new mapping from scratch (which will overwrite the existing file)
+        
+        Keep your response concise but informative.
+        Use this exact format:
+        
+        "## 📄 Existing Mapping Found!
+        
+        I found an existing EnzymeML mapping file with previous results.
+        
+        **Please choose:**
+        - Type `use existing` to load and use the previous mapping results
+        - Type `create new` to start fresh and create a new mapping (this will overwrite the existing file)
+        
+        What would you like to do?"
+    """,
+    model="gpt-3.5-turbo",
+    output_type=str,
+)
 
 biochemistry_semantics_agent = Agent(
     name="biochemistry_semantics_agent",
     instructions="""
-        You are a specialized agent for finding semantic matches between different biochemical terms .
-        Other agents may approach you if uncertain wheter a term in its instructions matches another term. 
-        E.g. if an name of a protein is equivalent to the database name of a protein. (obviously not). But e.g. a `enzyme` is equivalent to a `protein`.
-        or a small molecule to a chemical substance or compound.
-        Keep your answer short and concise.
+        You are a seasoned biochemist assisting mapping agents. 
+        They may ask whether a database term is semantically equivalent to a term in a target data model.
+        For example, 'enzyme' and 'protein' are equivalent; 'protein name' and 'database name' are not.
+        Be pragmatic: accept close matches when exact ones are unavailable (e.g., using 'id' as 'name' if needed).
+        Keep responses short and precise.
     """,
     model=MODEL,
 )
@@ -21,37 +76,38 @@ biochemistry_semantics_agent = Agent(
 
 # ── Data Assessment Agents (is atomic information for EnzymeML present in the database)
 small_molecule_agent = Agent(
-    name="small_molecule_agent",
+    name="SmallMolecule",
     instructions=f"""
         You are a specialized agent for mapping database information to SmallMolecule objects. 
         Here is the description of the SmallMolecule object:
         ```
-        {SmallMolecule.model_json_schema()}
+        {clean_json_ld(SmallMolecule.model_json_schema())}
         ```
-        You need to call the `get_graph_schema` tool to get the graph schema 
-        and then use the `execute_query` tool to get the data you need to map. 
-        You can only use information that is present in the database results. 
-        For the ID field, you can use an abbreviation of the molecule name (e.g., 'glc' for 'glucose').
-        Never fill out the fields `@id`, `@type`, or `@context`.
-        If multiple molecules are asked for, you need to return a list of SmallMolecule objects. Adjust the cypher query accordingly.
+        {OBJECT_MAPPING_PROCEDURE}
+
     """,
     model=MODEL,
     output_type=MappingReport,
-    tools=[get_graph_schema, execute_query],
+    tools=[
+        get_graph_schema,
+        biochemistry_semantics_agent.as_tool(
+            tool_name="biochemistry_semantics_agent",
+            tool_description="A tool to clarify ambiguous mappings.",
+        ),
+    ],
 )
 
 
 protein_agent = Agent(
-    name="protein_agent",
+    name="Protein",
     instructions=f"""
         You are a specialized agent for finding semantic matches between the description of an enzyme and the nodes and relationships in a Neo4j database that should be mapped to an Enzyme object.
         Your job is to check if in the Graph all mandatory information infomation is present to map to an instance of Enzyme.
         Here is the description of the Enzyme object:
         ```
-        {Protein.model_json_schema()}
+        {clean_json_ld(Protein.model_json_schema())}
         ```
-        If you cannot find a match for the `id` field, you can use the content that fits the `name` field for the `id` field.
-        So this isnt't a show stopper.
+        {OBJECT_MAPPING_PROCEDURE}
     """,
     model=MODEL,
     tools=[get_graph_schema],
@@ -60,15 +116,15 @@ protein_agent = Agent(
 
 
 measurement_agent = Agent(
-    name="measurement_agent",
+    name="Measurement",
     instructions=f"""
         You are a specialized agent for finding finding the correct mappings for a Measurement object.
         The object contains a nested object of MeasurementData. Don't consider it. That's the job of another agent.
         Here is the description of the Measurement object:
         ```
-        {Measurement.model_json_schema()}
+        {clean_json_ld(Measurement.model_json_schema())}
         ```
-        If you cannot find a match for the `id` field, you can use the content that fits the `name` field. And vice versa.
+        {OBJECT_MAPPING_PROCEDURE}
     """,
     model=MODEL,
     tools=[get_graph_schema],
@@ -76,44 +132,54 @@ measurement_agent = Agent(
 )
 
 measurement_data_agent = Agent(
-    name="measurement_data_agent",
+    name="MeasurementData",
     instructions=f"""
         You are a specialized agent for finding the correct mappings for a MeasurementData object.
         Here is the description of the MeasurementData object:
         ```
-        {MeasurementData.model_json_schema()}
+        {clean_json_ld(MeasurementData.model_json_schema())}
         ```
+        {OBJECT_MAPPING_PROCEDURE}
     """,
     model=MODEL,
     tools=[get_graph_schema],
     output_type=MappingReport,
 )
 
-mapping_evaluation_agent = Agent(
-    name="mapping_evaluation_agent",
+mapping_report_agent = Agent(
+    name="MappingReport",
     instructions="""
-        You are a specialized agent for evaluating the reports of the individual agents.
-        Your job is to decide if the mapping are reasonable.
-        You can change the reports if neccessary in accordance with the biochemistry_semantics_agent.
-        You can also get the graph schema to understand the graph using the `get_graph_schema` tool.
-        You need to evaluate the mapping and return your final report.
+        You are a specialized agent for writing a message to the user notifying them of the `MappingReport`s
+        and asking them to clarify the mappings if neccessary.
+        Write a list of instructions to the user to clarify the mappings if neccessary.
+        Also ask the user if any of the mappings are incorrect.
+        If there isn't any ambiguity, or incorrect mapping for an object,
+        dont show the corresponding lvl 3 headers.
+
+        Write your message in the following format:
+            ```
+            # EnzymeML Mapping Report
+            <YOUR 3 SENTENCE SUMMARY>
+            ## <object_name>
+            ### ✅ Found Mappings
+                - <attribute_name> <-> <node_name>.<attribute_name>
+                - ...
+            ### ⚠️ Ambiguous Mappings
+                - <attribute_name> <-> <node_name>.<attribute_name>
+                - ...
+            ### ❌ Missing Mandatory Properties
+                - <attribute_name>
+                - ...
+            ## Please clarify the following mappings:
+            <LIST OF TASKS TO THE USER TO CLARIFY>
+            ```
     """,
     model=MODEL,
-    output_type=EvaluationReport,
-    tools=[
-        biochemistry_semantics_agent.as_tool(
-            tool_name="biochemistry_semantics_agent",
-            tool_description="A tool to clarify ambiguous mappings.",
-        ),
-        get_graph_schema,
-    ],
+    output_type=str,
 )
 
-# ── Data Analysis Agents
-
-
 cypher_translator_agent = Agent(
-    name="cypher_translator_agent",
+    name="CypherTranslator",
     instructions=(
         "You are a specialized agent for translating natural language queries into Cypher queries. "
         "You can only use nodes and relationships that are allowed by the graph schema. "
@@ -155,7 +221,7 @@ data_analysis_agent = Agent(
 
 
 question_dispatcher_agent = Agent(
-    name="question_dispatcher_agent",
+    name="QuestionDispatcher",
     instructions="""
         You are a specialized agent that dispatches tasks to the appropriate agents
         based on the user's question.
@@ -180,5 +246,68 @@ question_dispatcher_agent = Agent(
     handoffs=[cypher_translator_agent, data_analysis_agent],
 )
 
+
+species_distinguisher_agent = Agent(
+    name="species_distinguisher_agent",
+    instructions=f"""
+    ROLE ▸ You are an Biochemisty Expert. You analyze an **unknown** property graph (Neo4j-like) that encodes:
+        reactions, measurements, proteins/enzymes, and small-molecule species.
+        The Graph has 2 meta concepts of nodes:
+        - Species: a species is a protein or small molecule. 
+            - E.g., protein, small molecule, enzyme, biocatalyst, etc.
+        - Measurement / Reaction / Preparation: a measurement or reaction is a collection of data points.
+            - E.g., Measurement, Reaction, preparation, settings, etc.
+
+        These two meta concepts can interact with each other in different ways, altering the context of a species 
+        to its observation / measurement / reaction / preparation.
+
+        Your Job is to find unique traversals in this graph descibing the interaction between the meta concepts.
+        Here is the graph schema:
+        ```
+        {GRAPH_SCHEMA_EXAMPLE}
+        ```
+    
+        The idea is to finde unique queries that are used by a different agent to build cypher queries to extract the necessary data.
+
+        Therefore, you need to find meaningfull traversals that allow to extract the different species that were involved in a 
+        reaction or measurement. For a species to be listed it always needs to have a clearly identifiable initial concentration and unit.
+        Otherwise leave it out.
+        If there is besides the initial concentration also information about the measurement values (besides initial concentration) and 
+        corresponding time values and resective concentration, add this information to the `has_observed_data` field. of the SpeciesTraversal.
+
+        The goal of each traversal is to find initial concentrations for each species that is present in one measurement / reaction / preparation.
+        So keep a look out for protrties or relationships like "enzyme_concentration", "initial_enzyme", "substrate_conc", cosubstrate_conc, "product_conc", etc.
+
+    Account for user notes: these are important to understand the graph if there are any.
+
+    OUTPUT ▸ Return a `SpeciesTraversalReport` matching the schema exactly.
+    Fill out a reasoned debug explanation for each traversal candidate why it was rejected. 
+    Because the output does not contain everything that i would like to see there!!!
+    """,
+    model=MODEL,
+    output_type=SpeciesTraversalReport,
+)
+
+
 if __name__ == "__main__":
-    print(SmallMolecule.model_json_schema())
+    import asyncio
+
+    from agents import Runner
+    from rich import print as rprint
+
+    message = """
+    Execute your job.
+    Message from previous agent:
+    ```
+    We already know that the species id is stored in the following NodeAttributes:
+    SmallMolecule  species_id ⟷ Molecule._row_uuid
+    Protein        species_id ⟷ Enzyme.ENZYME_ID
+    ```
+    User note:
+    ```
+    None
+    ```
+    """
+
+    res = asyncio.run(Runner.run(species_distinguisher_agent, message))
+    rprint(res.final_output)

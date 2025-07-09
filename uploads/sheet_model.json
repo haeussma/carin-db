@@ -4,6 +4,10 @@
             "name": "Molecule",
             "columns": [
                 {
+                    "name": "molecule_id",
+                    "data_type": "float"
+                },
+                {
                     "name": "NAME",
                     "data_type": "str"
                 },
@@ -153,10 +157,6 @@
                     "data_type": "bool"
                 },
                 {
-                    "name": "Concentration",
-                    "data_type": "str"
-                },
-                {
                     "name": "Concentration_unit",
                     "data_type": "str"
                 },
@@ -170,10 +170,6 @@
                 },
                 {
                     "name": "storage_temperature_unit",
-                    "data_type": "str"
-                },
-                {
-                    "name": "Volume_in_reaction",
                     "data_type": "str"
                 },
                 {
@@ -297,6 +293,10 @@
                 {
                     "name": "unit_agitation",
                     "data_type": "str"
+                },
+                {
+                    "name": "measured_molecule",
+                    "data_type": "str"
                 }
             ]
         },
@@ -336,18 +336,6 @@
                     "data_type": "str"
                 },
                 {
-                    "name": "measurement_1",
-                    "data_type": "float"
-                },
-                {
-                    "name": "measurement_2",
-                    "data_type": "float"
-                },
-                {
-                    "name": "measurement_3",
-                    "data_type": "float"
-                },
-                {
                     "name": "activity",
                     "data_type": "float"
                 },
@@ -368,8 +356,16 @@
                     "data_type": "str"
                 },
                 {
-                    "name": "was_measured",
+                    "name": "product_measured",
+                    "data_type": "float"
+                },
+                {
+                    "name": "measurement_type",
                     "data_type": "str"
+                },
+                {
+                    "name": "product_concentration",
+                    "data_type": "float"
                 }
             ]
         }
@@ -383,16 +379,16 @@
             "target_column_name": "ENZYME_ID"
         },
         {
-            "source_sheet_name": "Reaction",
-            "source_column_name": "has_protein",
-            "target_sheet_name": "Biocatalyst",
-            "target_column_name": "EXPRESSION_ID"
-        },
-        {
             "source_sheet_name": "Measurement",
             "source_column_name": "has_reaction",
             "target_sheet_name": "Reaction",
             "target_column_name": "REACTION_ID"
+        },
+        {
+            "source_sheet_name": "Reaction",
+            "source_column_name": "has_protein",
+            "target_sheet_name": "Biocatalyst",
+            "target_column_name": "EXPRESSION_ID"
         },
         {
             "source_sheet_name": "Reaction",

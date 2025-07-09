@@ -2,6 +2,8 @@
 
 import { useRef, useEffect, useState } from "react"
 import { Send } from "lucide-react"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Message {
     id: string;
@@ -26,7 +28,7 @@ export default function ChatPage() {
 
     useEffect(() => {
         // Initialize WebSocket connection
-        const ws = new WebSocket("/api/llm_chat");
+        const ws = new WebSocket(`ws://${window.location.host}/api/chat/llm_chat`);
 
         ws.onopen = () => {
             console.log("Connected to WebSocket");
@@ -51,11 +53,6 @@ export default function ChatPage() {
             }]);
 
             setIsLoading(false);
-
-            // If we got a final response, we can close the connection
-            if (response.type === "final") {
-                ws.close();
-            }
         };
 
         ws.onerror = (error) => {
@@ -161,7 +158,11 @@ export default function ChatPage() {
                                             ? "border-green-200 bg-green-50 text-green-800"
                                             : "border-gray-200 bg-gray-50 text-gray-800"
                                         }`}>
-                                        {message.content}
+                                        <div className="prose prose-sm max-w-none">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                {message.content}
+                                            </ReactMarkdown>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -208,6 +209,9 @@ export default function ChatPage() {
                         </button>
                     </form>
                 </div>
+                <div className="prose prose-sm max-w-none">
+                </div>
+
             </div>
         </div>
     )

@@ -1,0 +1,153 @@
+{
+  "metadata": {
+    "session_id": "84aedddd-e1e1-484b-9191-b81a0ceb1fff",
+    "created_at": "2025-07-09 13:06:48.383344",
+    "user_interactions": 9,
+    "original_user_input": "yes",
+    "completion_status": "completed"
+  },
+  "small_molecule": {
+    "object_type": "SmallMolecule",
+    "status": "approved",
+    "attribute_mappings": [
+      {
+        "obj_attr_name": "id",
+        "node_attr": {
+          "node_name": "Molecule",
+          "node_attr": "molecule_id"
+        }
+      },
+      {
+        "obj_attr_name": "name",
+        "node_attr": {
+          "node_name": "Molecule",
+          "node_attr": "NAME"
+        }
+      }
+    ],
+    "ambiguous_mappings": [],
+    "missing_mandatory": [],
+    "user_feedback": "yes"
+  },
+  "protein": null,
+  "measurement": {
+    "object_type": "Measurement",
+    "status": "approved",
+    "attribute_mappings": [
+      {
+        "obj_attr_name": "id",
+        "node_attr": {
+          "node_name": "Measurement",
+          "node_attr": "_row_uuid"
+        }
+      },
+      {
+        "obj_attr_name": "name",
+        "node_attr": {
+          "node_name": "Measurement",
+          "node_attr": "_row_uuid"
+        }
+      },
+      {
+        "obj_attr_name": "ph",
+        "node_attr": {
+          "node_name": "Reaction",
+          "node_attr": "ph"
+        }
+      },
+      {
+        "obj_attr_name": "temperature",
+        "node_attr": {
+          "node_name": "Reaction",
+          "node_attr": "temperature"
+        }
+      },
+      {
+        "obj_attr_name": "temperature_unit",
+        "node_attr": {
+          "node_name": "Reaction",
+          "node_attr": "unit temperature"
+        }
+      }
+    ],
+    "ambiguous_mappings": [],
+    "missing_mandatory": [],
+    "user_feedback": "yes"
+  },
+  "measurement_species": [
+    {
+      "category": "protein",
+      "traversal": "MATCH (meas:Measurement)-[:has_reaction]->(r:Reaction)-[:has_protein]->(bc:Biocatalyst)-[:expressed_enzyme]->(e:Enzyme)",
+      "species_id": {
+        "node_name": "e",
+        "node_attr": "ENZYME_ID"
+      },
+      "initial": {
+        "node_name": "meas",
+        "node_attr": "enzyme_concentration"
+      },
+      "data_unit": {
+        "node_name": "meas",
+        "node_attr": "enzyme_unit"
+      },
+      "has_observed_data": null
+    },
+    {
+      "category": "small_molecule",
+      "traversal": "MATCH (meas:Measurement)-[:has_reaction]->(r:Reaction)-[:has_substrate]->(m:Molecule)",
+      "species_id": {
+        "node_name": "m",
+        "node_attr": "molecule_id"
+      },
+      "initial": {
+        "node_name": "meas",
+        "node_attr": "substrate_concentration"
+      },
+      "data_unit": {
+        "node_name": "meas",
+        "node_attr": "concentration_unit"
+      },
+      "has_observed_data": null
+    },
+    {
+      "category": "small_molecule",
+      "traversal": "MATCH (meas:Measurement)-[:has_reaction]->(r:Reaction)-[:has_cosubstrate]->(m:Molecule)",
+      "species_id": {
+        "node_name": "m",
+        "node_attr": "molecule_id"
+      },
+      "initial": {
+        "node_name": "meas",
+        "node_attr": "cosubstrate_concentration"
+      },
+      "data_unit": {
+        "node_name": "meas",
+        "node_attr": "concentration_unit"
+      },
+      "has_observed_data": null
+    },
+    {
+      "category": "small_molecule",
+      "traversal": "MATCH (meas:Measurement)-[:has_reaction]->(r:Reaction)-[:has_product]->(m:Molecule)",
+      "species_id": {
+        "node_name": "m",
+        "node_attr": "molecule_id"
+      },
+      "initial": {
+        "node_name": "meas",
+        "node_attr": "product_initial"
+      },
+      "data_unit": {
+        "node_name": "meas",
+        "node_attr": "concentration_unit"
+      },
+      "has_observed_data": {
+        "query": "MATCH (meas:Measurement)-[:has_reaction]->(r:Reaction)-[:has_product]->(m:Molecule) RETURN meas.measurement_time AS time, meas.time_unit AS time_unit, meas.product_measured AS concentration",
+        "explanation": "Retrieves observed product concentrations over time"
+      }
+    }
+  ],
+  "total_agents_run": 4,
+  "approved_mappings_count": 4,
+  "rejected_mappings_count": 0
+}

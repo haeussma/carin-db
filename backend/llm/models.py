@@ -380,6 +380,8 @@ class EnzymeMLMappings(BaseModel):
             self.small_molecule = object_mapping
         elif object_type == "Measurement":
             self.measurement = object_mapping
+        elif object_type == "MeasurementData":
+            self.measurement_data = object_mapping
         else:
             raise ValueError(
                 f"Unknown object type for adding a `ObjectMapping`: {object_type}"

@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "session_id": "ebeec770-f8c8-417b-8d94-2d904a5c414b",
-    "created_at": "2025-07-09 13:25:38.825894",
-    "user_interactions": 10,
+    "session_id": "c76f6978-5404-4d17-91f4-b3bebf601815",
+    "created_at": "2025-07-10 11:03:51.170517",
+    "user_interactions": 12,
     "original_user_input": "yes",
     "completion_status": "completed"
   },
@@ -37,14 +37,14 @@
         "obj_attr_name": "id",
         "node_attr": {
           "node_name": "Enzyme",
-          "node_attr": "database_id"
+          "node_attr": "ENZYME_ID"
         }
       },
       {
         "obj_attr_name": "name",
         "node_attr": {
           "node_name": "Enzyme",
-          "node_attr": "enzyme_id"
+          "node_attr": "ENZYME_ID"
         }
       },
       {
@@ -52,6 +52,20 @@
         "node_attr": {
           "node_name": "Enzyme",
           "node_attr": "sequence"
+        }
+      },
+      {
+        "obj_attr_name": "vessel_id",
+        "node_attr": {
+          "node_name": "Reaction",
+          "node_attr": "vessel"
+        }
+      },
+      {
+        "obj_attr_name": "organism",
+        "node_attr": {
+          "node_name": "Biocatalyst",
+          "node_attr": "Production_organism"
         }
       }
     ],
@@ -68,6 +82,13 @@
         "node_attr": {
           "node_name": "Measurement",
           "node_attr": "_row_uuid"
+        }
+      },
+      {
+        "obj_attr_name": "name",
+        "node_attr": {
+          "node_name": "Measurement",
+          "node_attr": "measurement_type"
         }
       },
       {
@@ -92,24 +113,31 @@
         }
       }
     ],
-    "ambiguous_mappings": [
-      {
-        "obj_attr_name": "name",
-        "node_attr": {
-          "node_name": "Measurement",
-          "node_attr": "measurement_type"
-        }
-      }
-    ],
-    "missing_mandatory": [
-      "name"
-    ],
-    "user_feedback": "nor name use uuid aswell"
+    "ambiguous_mappings": [],
+    "missing_mandatory": [],
+    "user_feedback": "yes"
   },
   "measurement_species": [
     {
+      "category": "protein",
+      "traversal": "MATCH (me:Measurement)-[:HAS_REACTION]->(re:Reaction)-[:HAS_PROTEIN]->(bi:Biocatalyst)-[:EXPRESSED_ENZYME]->(en:Enzyme)\nRETURN en.ENZYME_ID AS species_id, me.enzyme_concentration AS initial_concentration",
+      "species_id": {
+        "node_name": "Enzyme",
+        "node_attr": "ENZYME_ID"
+      },
+      "initial": {
+        "node_name": "Measurement",
+        "node_attr": "enzyme_concentration"
+      },
+      "data_unit": {
+        "node_name": "Measurement",
+        "node_attr": "enzyme_unit"
+      },
+      "has_observed_data": null
+    },
+    {
       "category": "small_molecule",
-      "traversal": "MATCH (m:Measurement)-[:has_reaction]->(r:Reaction)-[:has_substrate]->(sm:Molecule) RETURN sm.molecule_id AS id, m.substrate_concentration AS initial, m.concentration_unit AS unit",
+      "traversal": "MATCH (me:Measurement)-[:HAS_REACTION]->(re:Reaction)-[:HAS_SUBSTRATE]->(mo:Molecule)\nRETURN mo.molecule_id AS species_id, me.substrate_concentration AS initial_concentration",
       "species_id": {
         "node_name": "Molecule",
         "node_attr": "molecule_id"
@@ -126,7 +154,7 @@
     },
     {
       "category": "small_molecule",
-      "traversal": "MATCH (m:Measurement)-[:has_reaction]->(r:Reaction)-[:has_cosubstrate]->(c:Molecule) RETURN c.molecule_id AS id, m.cosubstrate_concentration AS initial, m.concentration_unit AS unit",
+      "traversal": "MATCH (me:Measurement)-[:HAS_REACTION]->(re:Reaction)-[:HAS_COSUBSTRATE]->(mo:Molecule)\nRETURN mo.molecule_id AS species_id, me.cosubstrate_concentration AS initial_concentration",
       "species_id": {
         "node_name": "Molecule",
         "node_attr": "molecule_id"
@@ -143,7 +171,7 @@
     },
     {
       "category": "small_molecule",
-      "traversal": "MATCH (m:Measurement)-[:has_reaction]->(r:Reaction)-[:has_product]->(p:Molecule) RETURN p.molecule_id AS id, m.product_initial AS initial, m.concentration_unit AS unit",
+      "traversal": "MATCH (me:Measurement)-[:HAS_REACTION]->(re:Reaction)-[:HAS_PRODUCT]->(mo:Molecule)\nRETURN mo.molecule_id AS species_id, me.product_initial AS initial_concentration",
       "species_id": {
         "node_name": "Molecule",
         "node_attr": "molecule_id"
@@ -157,29 +185,12 @@
         "node_attr": "concentration_unit"
       },
       "has_observed_data": {
-        "query": "MATCH (m:Measurement)-[:has_reaction]->(r:Reaction)-[:has_product]->(p:Molecule) RETURN m.measurment_time AS time, m.product_measured AS concentration, m.time_unit AS time_unit, m.concentration_unit AS concentration_unit",
-        "explanation": "Time\u2010course product concentration measurements"
+        "query": "MATCH (me:Measurement)-[:HAS_REACTION]->(re:Reaction)-[:HAS_PRODUCT]->(mo:Molecule)\nWHERE me.product_measured IS NOT NULL\nRETURN me.measurment_time AS time, me.product_measured AS concentration, me.time_unit AS time_unit, me.concentration_unit AS concentration_unit",
+        "explanation": "Retrieve the time series of product concentration measurements for each reaction."
       }
-    },
-    {
-      "category": "protein",
-      "traversal": "MATCH (m:Measurement)-[:has_reaction]->(r:Reaction)-[:has_protein]->(b:Biocatalyst)-[:expressed_enzyme]->(e:Enzyme) RETURN e.database_id AS id, m.enzyme_concentration AS initial, m.enzyme_unit AS unit",
-      "species_id": {
-        "node_name": "Enzyme",
-        "node_attr": "database_id"
-      },
-      "initial": {
-        "node_name": "Measurement",
-        "node_attr": "enzyme_concentration"
-      },
-      "data_unit": {
-        "node_name": "Measurement",
-        "node_attr": "enzyme_unit"
-      },
-      "has_observed_data": null
     }
   ],
   "total_agents_run": 6,
-  "approved_mappings_count": 4,
-  "rejected_mappings_count": 2
+  "approved_mappings_count": 6,
+  "rejected_mappings_count": 0
 }

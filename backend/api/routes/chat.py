@@ -18,11 +18,17 @@ from ...llm.agents import (
     mapping_choice_parser_agent,
     mapping_file_checker_agent,
     measurement_agent,
+    measurement_data_agent,
     protein_agent,
     small_molecule_agent,
     species_distinguisher_agent,
 )
-from ...llm.models import EnzymeMLMappings, MappingReport, SpeciesTraversalReport
+from ...llm.models import (
+    EnzymeMLMappings,
+    MappingReport,
+    SpeciesTraversal,
+    SpeciesTraversalReport,
+)
 from ...services.database import get_db
 
 router = APIRouter(prefix="/chat")
@@ -106,28 +112,22 @@ class ChatState:
         if self.mapping.metadata.original_user_input is None:
             self.mapping.metadata.original_user_input = user_input
 
-        try:
-            if self.phase == ConversationPhase.DISCOVERY:
-                return await self._run_all_agents(user_input, websocket)
-            elif self.phase == ConversationPhase.AGENT_REVIEW:
-                return await self._handle_agent_review(user_input, websocket)
-            elif self.phase == ConversationPhase.SPECIES_ANALYSIS:
-                return await self._run_species_analysis(websocket)
-            elif self.phase == ConversationPhase.SPECIES_TRAVERSAL_REVIEW:
-                return await self._handle_species_traversal_review(
-                    user_input, websocket
-                )
-            elif self.phase == ConversationPhase.FINALIZATION:
-                return self._generate_final_document()
-            elif self.phase == ConversationPhase.EXISTING_MAPPING_CHOICE:
-                return await self._handle_existing_mapping_choice(user_input, websocket)
-            elif self.phase == ConversationPhase.DATA_MAPPING:
-                return await self._handle_data_mapping(user_input, websocket)
+        if self.phase == ConversationPhase.DISCOVERY:
+            return await self._run_all_agents(user_input, websocket)
+        elif self.phase == ConversationPhase.AGENT_REVIEW:
+            return await self._handle_agent_review(user_input, websocket)
+        elif self.phase == ConversationPhase.SPECIES_ANALYSIS:
+            return await self._run_species_analysis(websocket)
+        elif self.phase == ConversationPhase.SPECIES_TRAVERSAL_REVIEW:
+            return await self._handle_species_traversal_review(user_input, websocket)
+        elif self.phase == ConversationPhase.FINALIZATION:
+            return self._generate_final_document()
+        elif self.phase == ConversationPhase.EXISTING_MAPPING_CHOICE:
+            return await self._handle_existing_mapping_choice(user_input, websocket)
+        elif self.phase == ConversationPhase.DATA_MAPPING:
+            return await self._handle_data_mapping(user_input, websocket)
 
-            return {"type": "error", "content": "Unknown phase"}
-        except Exception as e:
-            logger.error(f"Error in evaluate: {str(e)}")
-            return {"type": "error", "content": f"Error: {str(e)}"}
+        return {"type": "error", "content": "Unknown phase"}
 
     async def _run_all_agents(
         self, user_input: str, websocket: Optional[WebSocket] = None
@@ -947,6 +947,7 @@ What would you like to do?""",
         """Run all mapping agents in parallel"""
 
         mappings = self._load_enzymeml_mapping()
+        logger.info(f"Loaded mappings: {mappings}")
 
         # run separate agents to extract information from graph
         message = f"""
@@ -1024,6 +1025,27 @@ What would you like to do?""",
 
         logger.info(f"Protein: {p}")
 
+        # measurement data ------------------------------------------------------------
+        # r = await self._get_measurement_data_mappings(mappings.measurement_species)
+        # logger.info(f"recieved {len(r)} measurement data mappings")
+
+        # # run topology agent
+        # message = f"""
+        # We need to get a query for getting all nodes related to the following user input:
+        # <user_input>
+        # {user_input}
+        # </user_input>
+
+        # The following species traversals are related to the user input:
+        # <species_traversals>
+        # {mappings.measurement_species}
+        # </species_traversals>
+        # """
+        # topology_result = await Runner.run(
+        # )
+        # logger.info(f"Topology result: {topology_result.final_output}")
+
+        # create enzymeml document
         doc = EnzymeMLDocument(
             name="generated_enzymeml", small_molecules=sm, proteins=p
         )
@@ -1032,6 +1054,50 @@ What would you like to do?""",
             "type": "final",
             "content": doc.model_dump_json(),
         }
+
+    async def _get_measurement_data_mappings(
+        self, species_traversals: list[SpeciesTraversal]
+    ):
+        try:
+            mappings = self._load_enzymeml_mapping()
+            logger.info(f"Loaded mappings: {mappings}")
+            """Get the measurement data mappings for the given species traversals"""
+            logger.info(
+                f"Getting measurement data mappings for {len(species_traversals)} species traversals"
+            )
+
+            # get all traversals with observed data
+            with_data = [t for t in species_traversals if t.has_observed_data]
+
+            inputs = []
+            for data in with_data:
+                inputs.append(f"""
+                            We have already identified that for the following species there must be measured data in the graph:
+                            <species_traversal>
+                            {data.model_dump_json()}
+                            </species_traversal>
+                            
+                            Please figure out the object mappings.
+                            """)
+
+            # let agent figure out object mappings
+            tasks = [
+                Runner.run(starting_agent=measurement_data_agent, input=input)
+                for input in inputs
+            ]
+            results = await asyncio.gather(*tasks)
+
+            for result in results:
+                logger.info(f"Measurement data result: {result.final_output}")
+
+        except Exception as e:
+            logger.error(f"Error in get_measurement_data_mappings: {str(e)}")
+            return {
+                "type": "error",
+                "content": f"Error in get_measurement_data_mappings: {str(e)}",
+            }
+
+        return results
 
     async def _handle_data_mapping(
         self, user_input: str, websocket: Optional[WebSocket] = None

@@ -18,9 +18,9 @@ fastapi = "^0.115"
 neo4j = "^5"
 xlsxwriter = "^3.2"
 openai-agents = "^0.0.15"
-pyenzyme = {git = "https://github.com/EnzymeML/PyEnzyme.git", rev = "v2-migration"}
 pydantic-settings = "^2"
 websockets = "^15.0.1"
+pyenzyme = "^2.1.0"
 
 
 [tool.poetry.group.dev.dependencies]

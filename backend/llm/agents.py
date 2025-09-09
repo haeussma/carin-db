@@ -1,6 +1,7 @@
 from enum import Enum
 
 from agents import Agent
+from pydantic import BaseModel, Field
 from pyenzyme import Measurement, MeasurementData, Protein, SmallMolecule
 
 from .models import (
@@ -402,6 +403,38 @@ data_mapping_agent = Agent(
     model=MODEL,
     output_type=str,
     tools=[get_graph_schema, execute_query],
+)
+
+
+class MeasurementTopology(BaseModel):
+    measurement_id_query: str = Field(
+        description="A cypher query that returns the internal Neo4j node IDs of all nodes that contain *measured* measurement data."
+    )
+    additional_info: str = Field(
+        description="Additional information how the measured data is connected to the species."
+    )
+
+
+measurement_topology_agent = Agent(
+    name="measurement_topology_agent",
+    instructions="""
+        You are a specialized agent for analyzing the topology of a measurement.
+        You are given infromation where to find measured data in the graph.
+        Additionally you are provided with information for which subset of the graph data is needed.
+
+        Your job is to create a `MeasurementTopology` object that describes the topology of the measurement.
+        The purpose of the `MeasurementTopology` object is to yield a cypher query that leads to the node ids
+        with the measured data which are a subset of the entire graph.
+
+        Verfiy against the graph schema that the query is valid.
+
+        <graph_schema>
+        {GRAPH_SCHEMA_EXAMPLE}
+        </graph_schema>
+    """,
+    model=MODEL,
+    output_type=MeasurementTopology,
+    # tools=[get_graph_schema],
 )
 
 

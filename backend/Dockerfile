@@ -1,14 +1,16 @@
 FROM python:3.11-slim
-
 WORKDIR /app
 
-# Install system dependencies
+# --- system libs needed by libsbml / pyenzyme ---
 RUN apt-get update && apt-get install -y \
-    build-essential \
+    libexpat1 \
+    libxml2 \
+    zlib1g \
+    libbz2-1.0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install poetry
-RUN pip install poetry
+# Poetry
+RUN pip install --no-cache-dir poetry
 
 # Copy only dependency files first from the backend folder
 COPY backend/pyproject.toml backend/poetry.lock* ./

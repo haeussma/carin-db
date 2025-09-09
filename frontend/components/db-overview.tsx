@@ -18,17 +18,17 @@ interface NodeData {
 // Generate an HSL color based on index with good distinction between colors
 const generateColor = (index: number, total: number): string => {
     // Use the golden ratio to create well-distributed hues
-    const goldenRatioConjugate = 0.618033988749895;
+    const goldenRatioConjugate = 0.618033988749895
 
     // Start at a random point and step through hue space
-    let hue = (index * goldenRatioConjugate * 360) % 360;
+    const hue = (index * goldenRatioConjugate * 360) % 360
 
     // Adjust saturation and lightness for better visibility
-    const saturation = 70 + (index % 3) * 10; // 70-90%
-    const lightness = 55 + (index % 2) * 10;  // 55-65%
+    const saturation = 70 + (index % 3) * 10 // 70-90%
+    const lightness = 55 + (index % 2) * 10 // 55-65%
 
-    return `hsl(${Math.floor(hue)}, ${saturation}%, ${lightness}%)`;
-};
+    return `hsl(${Math.floor(hue)}, ${saturation}%, ${lightness}%)`
+}
 
 // CSS theme colors (used when available)
 const themeColors = [
@@ -44,13 +44,15 @@ const themeColors = [
     "hsl(var(--chart-10, 260, 70%, 50%))",
     "hsl(var(--chart-11, 300, 70%, 50%))",
     "hsl(var(--chart-12, 340, 70%, 50%))",
-];
+]
 
 export default function DatabaseNodeVisualization() {
     const [activeTab, setActiveTab] = useState("overview")
     const [nodeData, setNodeData] = useState<NodeData[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     // Define fetchNodeData outside useEffect so it can be called from JSX
     const fetchNodeData = async () => {
@@ -58,7 +60,7 @@ export default function DatabaseNodeVisualization() {
         setError(null)
 
         try {
-            const response = await fetch('/api/database/status')
+            const response = await fetch("/api/database/status")
 
             // print data
             console.log(response)
@@ -75,20 +77,18 @@ export default function DatabaseNodeVisualization() {
             }
 
             // Transform the data into the format we need
-            const nodeTypes = Object.keys(data);
+            const nodeTypes = Object.keys(data)
             const transformedData: NodeData[] = nodeTypes.map((type, index) => ({
                 type,
                 count: data[type] as number,
                 // Use theme colors when available, fallback to generated colors
-                color: index < themeColors.length
-                    ? themeColors[index]
-                    : generateColor(index, nodeTypes.length)
-            }));
+                color: index < themeColors.length ? themeColors[index] : generateColor(index, nodeTypes.length),
+            }))
 
             setNodeData(transformedData)
         } catch (err) {
             console.error("Error fetching node data:", err)
-            setError(err instanceof Error ? err.message : 'An error occurred while fetching data')
+            setError(err instanceof Error ? err.message : "An error occurred while fetching data")
 
             // If we couldn't fetch data, use empty array
             setNodeData([])
@@ -109,8 +109,110 @@ export default function DatabaseNodeVisualization() {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
     }
 
+    const handleDeleteAll = async () => {
+        if (!showDeleteConfirm) {
+            setShowDeleteConfirm(true)
+            return
+        }
+
+        setIsDeleting(true)
+        try {
+            const response = await fetch("/api/database/delete_all", {
+                method: "DELETE",
+            })
+
+            if (response.ok) {
+                // Refresh the data after successful deletion
+                await fetchNodeData()
+                setShowDeleteConfirm(false)
+            } else {
+                console.error("Failed to delete data")
+            }
+        } catch (error) {
+            console.error("Error deleting data:", error)
+        } finally {
+            setIsDeleting(false)
+        }
+    }
+
+    const handleCancelDelete = () => {
+        setShowDeleteConfirm(false)
+    }
+
+    // state
+    const [showDeleteSchemaConfirm, setShowDeleteSchemaConfirm] = useState(false)
+    const [isDeletingSchema, setIsDeletingSchema] = useState(false)
+
+    // handler
+    const handleDeleteSchema = async () => {
+        if (!showDeleteSchemaConfirm) {
+            setShowDeleteSchemaConfirm(true)
+            return
+        }
+        setIsDeletingSchema(true)
+        try {
+            const res = await fetch("/api/config/sheet_model", { method: "DELETE" })
+            if (!res.ok) {
+                const t = await res.text().catch(() => "")
+                throw new Error(t || `Schema delete failed: ${res.status} ${res.statusText}`)
+            }
+            setShowDeleteSchemaConfirm(false)
+            await fetchNodeData() // if counts depend on schema
+        } catch (e) {
+            console.error(e)
+            setError(e instanceof Error ? e.message : "Schema delete error")
+        } finally {
+            setIsDeletingSchema(false)
+        }
+    }
+
     return (
         <div className="container mx-auto p-4 space-y-6">
+            <div className="fixed top-4 right-4 z-50">
+                <div className="bg-background border rounded-lg p-3 shadow-lg">
+                    <div className="flex flex-col gap-3">
+                        {/* --- Delete ALL DATA --- */}
+                        {!showDeleteConfirm ? (
+                            <Button variant="destructive" size="sm" onClick={handleDeleteAll} disabled={isDeleting}>
+                                Delete all data
+                            </Button>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-destructive">Are you sure?</span>
+                                <Button variant="destructive" size="sm" onClick={handleDeleteAll} disabled={isDeleting}>
+                                    {isDeleting ? "Deleting..." : "Yes"}
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={handleCancelDelete} disabled={isDeleting}>
+                                    Cancel
+                                </Button>
+                            </div>
+                        )}
+
+                        {/* --- Delete GRAPH SCHEMA --- */}
+                        {!showDeleteSchemaConfirm ? (
+                            <Button variant="secondary" size="sm" onClick={handleDeleteSchema} disabled={isDeletingSchema}>
+                                Delete graph schema
+                            </Button>
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-amber-600">Are you sure?</span>
+                                <Button variant="secondary" size="sm" onClick={handleDeleteSchema} disabled={isDeletingSchema}>
+                                    {isDeletingSchema ? "Deleting..." : "Yes"}
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowDeleteSchemaConfirm(false)}
+                                    disabled={isDeletingSchema}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             <div className="flex flex-col space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Database Node Visualization</h2>
                 <p className="text-muted-foreground">Overview of node distribution in your database</p>
@@ -134,7 +236,7 @@ export default function DatabaseNodeVisualization() {
 
                             {/* Format the error message with line breaks */}
                             <div className="text-muted-foreground text-left">
-                                {error.split('\n').map((line, i) => (
+                                {error.split("\n").map((line, i) => (
                                     <p key={i} className={i > 0 ? "mt-2" : ""}>
                                         {line}
                                     </p>
@@ -144,16 +246,14 @@ export default function DatabaseNodeVisualization() {
                             {/* Different actions based on error type */}
                             {error.includes("Database connection settings") && (
                                 <div className="mt-4">
-                                    <p className="text-sm mb-2">
-                                        Configure your database connection in settings to continue.
-                                    </p>
+                                    <p className="text-sm mb-2">Configure your database connection in settings to continue.</p>
                                     <Button
                                         variant="outline"
                                         onClick={() => {
                                             // Open settings dialog by simulating a click on the settings button
-                                            const settingsButton = document.querySelector('[data-settings-button]');
+                                            const settingsButton = document.querySelector("[data-settings-button]")
                                             if (settingsButton instanceof HTMLElement) {
-                                                settingsButton.click();
+                                                settingsButton.click()
                                             }
                                         }}
                                     >
@@ -163,17 +263,15 @@ export default function DatabaseNodeVisualization() {
                             )}
                             {error.includes("Cannot connect to Neo4j database") && (
                                 <div className="mt-4">
-                                    <p className="text-sm mb-2">
-                                        Check your Neo4j server status and network settings.
-                                    </p>
+                                    <p className="text-sm mb-2">Check your Neo4j server status and network settings.</p>
                                     <div className="flex gap-2">
                                         <Button
                                             variant="outline"
                                             onClick={() => {
                                                 // Open settings dialog
-                                                const settingsButton = document.querySelector('[data-settings-button]');
+                                                const settingsButton = document.querySelector("[data-settings-button]")
                                                 if (settingsButton instanceof HTMLElement) {
-                                                    settingsButton.click();
+                                                    settingsButton.click()
                                                 }
                                             }}
                                         >
@@ -183,7 +281,7 @@ export default function DatabaseNodeVisualization() {
                                             variant="default"
                                             onClick={() => {
                                                 // Retry the data fetch
-                                                fetchNodeData();
+                                                fetchNodeData()
                                             }}
                                         >
                                             Retry Connection
@@ -193,16 +291,14 @@ export default function DatabaseNodeVisualization() {
                             )}
                             {error.includes("Authentication failed") && (
                                 <div className="mt-4">
-                                    <p className="text-sm mb-2">
-                                        Update your Neo4j username and password to continue.
-                                    </p>
+                                    <p className="text-sm mb-2">Update your Neo4j username and password to continue.</p>
                                     <Button
                                         variant="outline"
                                         onClick={() => {
                                             // Open settings dialog
-                                            const settingsButton = document.querySelector('[data-settings-button]');
+                                            const settingsButton = document.querySelector("[data-settings-button]")
                                             if (settingsButton instanceof HTMLElement) {
-                                                settingsButton.click();
+                                                settingsButton.click()
                                             }
                                         }}
                                     >
@@ -214,13 +310,8 @@ export default function DatabaseNodeVisualization() {
                                 !error.includes("Cannot connect to Neo4j database") &&
                                 !error.includes("Authentication failed") && (
                                     <div className="mt-4">
-                                        <p className="text-sm mb-2">
-                                            Please check your database connection and try again.
-                                        </p>
-                                        <Button
-                                            variant="default"
-                                            onClick={() => fetchNodeData()}
-                                        >
+                                        <p className="text-sm mb-2">Please check your database connection and try again.</p>
+                                        <Button variant="default" onClick={() => fetchNodeData()}>
                                             Retry
                                         </Button>
                                     </div>
@@ -234,12 +325,8 @@ export default function DatabaseNodeVisualization() {
                         <div className="flex flex-col items-center text-center">
                             <Database className="text-muted-foreground h-12 w-12 mb-4" />
                             <h3 className="text-xl font-semibold mb-2">No Data Available</h3>
-                            <p className="text-muted-foreground">
-                                There are no nodes in your database yet.
-                            </p>
-                            <p className="mt-4 text-sm">
-                                Start by importing data or creating nodes.
-                            </p>
+                            <p className="text-muted-foreground">There are no nodes in your database yet.</p>
+                            <p className="mt-4 text-sm">Start by importing data or creating nodes.</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -248,9 +335,7 @@ export default function DatabaseNodeVisualization() {
                     <Card className="w-full">
                         <CardHeader>
                             <CardTitle>Node Distribution</CardTitle>
-                            <CardDescription>
-                                Total of {formatNumber(totalNodes)} nodes in the database
-                            </CardDescription>
+                            <CardDescription>Total of {formatNumber(totalNodes)} nodes in the database</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -291,7 +376,7 @@ export default function DatabaseNodeVisualization() {
                                                     }
                                                     return acc
                                                 },
-                                                {} as Record<string, { label: string; color: string }>
+                                                {} as Record<string, { label: string; color: string }>,
                                             )}
                                         >
                                             <PieChart>
@@ -324,7 +409,7 @@ export default function DatabaseNodeVisualization() {
                                                     }
                                                     return acc
                                                 },
-                                                {} as Record<string, { label: string; color: string }>
+                                                {} as Record<string, { label: string; color: string }>,
                                             )}
                                         >
                                             <BarChart data={nodeData}>
@@ -357,46 +442,43 @@ function getIconForNodeType(type: string) {
     // Map common biological/chemical entity names to appropriate icons
     switch (type.toLowerCase()) {
         // Original mappings
-        case 'user':
+        case "user":
             return <Users {...iconProps} />
-        case 'document':
+        case "document":
             return <FileText {...iconProps} />
-        case 'collection':
+        case "collection":
             return <Folder {...iconProps} />
-        case 'product':
+        case "product":
             return <Package {...iconProps} />
-        case 'server':
+        case "server":
             return <Server {...iconProps} />
-        case 'storage':
+        case "storage":
             return <HardDrive {...iconProps} />
 
         // New mappings for biological/chemical entities
-        case 'molecule':
-        case 'compound':
+        case "molecule":
+        case "compound":
             return <Database {...iconProps} />
-        case 'enzyme':
-        case 'biocatalyst':
+        case "enzyme":
+        case "biocatalyst":
             return <Package {...iconProps} />
-        case 'peak':
-        case 'signal':
+        case "peak":
+        case "signal":
             return <HardDrive {...iconProps} />
-        case 'reaction':
-        case 'process':
+        case "reaction":
+        case "process":
             return <Server {...iconProps} />
-        case 'sampling':
-        case 'sample':
+        case "sampling":
+        case "sample":
             return <FileText {...iconProps} />
 
         // Default icon for any other type
         default:
             // If we can't find a specific icon, use the first letter of the type as an icon
             return (
-                <div
-                    className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary font-semibold text-xs"
-                >
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary font-semibold text-xs">
                     {type.charAt(0).toUpperCase()}
                 </div>
             )
     }
 }
-

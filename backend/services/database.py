@@ -1,14 +1,14 @@
-import threading
-from collections import defaultdict
-from typing import Annotated, Any, List
+from __future__ import annotations
 
-from fastapi import Depends
+from collections import defaultdict
+from typing import Any, List
+
 from loguru import logger
 from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
-from backend.settings import config
+from backend.settings import Settings
 
 
 class DatabaseError(Exception):
@@ -30,19 +30,14 @@ class DatabaseAuthenticationError(DatabaseError):
 
 
 class Database:
-    _instance: "Database | None" = None
-    _lock = threading.Lock()
-    _initialized: bool = False
-
     def __init__(self, uri: str, username: str, password: str):
         self.uri = uri
         self.username = username
         self.password = password
-        self.driver = self._connect()
+        self.driver = GraphDatabase.driver(
+            self.uri, auth=(self.username, self.password)
+        )
         self._validate_connection()
-
-    def _connect(self):
-        return GraphDatabase.driver(self.uri, auth=(self.username, self.password))
 
     def _validate_connection(self):
         try:
@@ -57,7 +52,7 @@ class Database:
             raise DatabaseConnectionError("Could not connect to the Neo4j database.")
         except Exception as e:
             logger.error(f"Unexpected error: {e}")
-            raise DatabaseError("An unknown error occurred while connecting to Neo4j.")
+            raise DatabaseError("Unknown error while connecting to Neo4j.")
 
     def close(self) -> None:
         if self.driver:
@@ -66,6 +61,9 @@ class Database:
     def execute_query(self, query: str):
         with self.driver.session() as session:
             return session.run(query).data()
+
+    def _connect(self):
+        return GraphDatabase.driver(self.uri, auth=(self.username, self.password))
 
     @property
     def get_graph_info_dict(self) -> dict[str, Any]:
@@ -187,9 +185,6 @@ class Database:
 
         return response[0]["labels"]
 
-
-def get_db() -> Database:  # FastAPI dependency
-    return Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
-
-
-DB = Annotated[Database, Depends(get_db)]
+    @classmethod
+    def from_config(cls, config: Settings) -> Database:
+        return Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)

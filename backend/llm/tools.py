@@ -3,7 +3,7 @@ from typing import Any
 from agents import function_tool
 from loguru import logger
 
-from ..services.database import get_db
+from backend.api.routes.deps import get_db
 
 # ---- Agent Tools ----
 

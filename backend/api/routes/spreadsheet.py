@@ -4,13 +4,14 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, List
 
 import pandas as pd
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
+from backend.api.routes.deps import get_db
 from backend.models.model import SheetModel
-from backend.services.database import DB
+from backend.services.database import Database
 from backend.services.database_populator import DatabasePopulator
 from backend.services.spreadsheet_validator import SpreadsheetValidator
 
@@ -147,13 +148,18 @@ async def validate_spreadsheet(path: str):
         )
 
 
+# 3. Update the /process endpoint to include compatibility check:
+
+
 @router.post("/process", tags=["Spreadsheet"])
 async def process_spreadsheet(
     file_path: Annotated[str, Body()],
-    db: DB,
+    db: Annotated[Database, Depends(get_db)],
+    force_process: Annotated[bool, Body()] = False,
 ):
-    """Reads a spreadsheet and populates the database with the data.
-    According to the sheet model, the data is mapped to the database.
+    """
+    Reads a spreadsheet and populates the database with the data.
+    If force_process=False, will check compatibility first.
     """
     try:
         logger.info("Processing spreadsheet")
@@ -161,13 +167,53 @@ async def process_spreadsheet(
         if not file_path:
             raise ValueError("No file path provided")
 
-        # Strip quotes from the path if present
         file_path = file_path.strip('"').strip("'")
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found at path: {file_path}")
 
-        # get sheet model from file
+        # Load and validate spreadsheet
+        builder = SpreadsheetValidator(path=file_path)
+        validation_errors = builder.validate_spreadsheet_data()
+
+        if validation_errors:
+            raise ValueError("Spreadsheet has validation errors")
+
+        # Check compatibility unless forced
+        if not force_process:
+            from backend.services.schema_compatibility_checker import (
+                SchemaCompatibilityChecker,
+            )
+
+            compatibility_checker = SchemaCompatibilityChecker(db)
+            compatibility_result = compatibility_checker.check_compatibility(
+                builder.get_sheets()
+            )
+
+            if (
+                not compatibility_result.is_compatible
+                and not compatibility_result.can_auto_resolve
+            ):
+                return {
+                    "status": "compatibility_check_required",
+                    "message": "Schema compatibility issues found",
+                    "compatibility_result": {
+                        "compatible": compatibility_result.is_compatible,
+                        "can_auto_resolve": compatibility_result.can_auto_resolve,
+                        "resolution_summary": compatibility_result.resolution_summary,
+                        "mismatches": [
+                            {
+                                "sheet_name": m.sheet_name,
+                                "type": m.mismatch_type,
+                                "message": m.message,
+                            }
+                            for m in compatibility_result.mismatches
+                        ],
+                    },
+                    "suggestion": "Review the changes above. If acceptable, call this endpoint again with force_process=true",
+                }
+
+        # Continue with existing processing logic...
         try:
             with open("uploads/sheet_model.json", "r") as f:
                 sheet_model = SheetModel.model_validate_json(f.read())
@@ -178,11 +224,7 @@ async def process_spreadsheet(
 
         logger.info(f"Process using file path: {file_path}")
 
-        logger.debug(f"sheet model received with keys: {sheet_model.__dict__.keys()}")
-
         # Populate DB
-        # load sheets from file
-        builder = SpreadsheetValidator(path=file_path)
         sheets = builder.sheets
         db_populator = DatabasePopulator(
             sheets=sheets,
@@ -190,7 +232,6 @@ async def process_spreadsheet(
         )
         db_populator.extract_to_db(db, sheet_model)
 
-        # Return success
         return {"message": "Spreadsheet processed successfully"}
 
     except ValueError as e:
@@ -265,3 +306,81 @@ async def generate_spreadsheet(request: SpreadsheetRequest):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers,
     )
+
+
+# 2. Update the spreadsheet route: api/routes/spreadsheet.py
+
+# Add this new endpoint before the existing /process endpoint:
+
+
+@router.post("/check_compatibility", tags=["Spreadsheet"])
+async def check_spreadsheet_compatibility(
+    file_path: Annotated[str, Body()],
+    db: Annotated[Database, Depends(get_db)],
+):
+    """
+    Check if a spreadsheet is compatible with existing graph schema.
+    Returns compatibility status and any required changes.
+    """
+    try:
+        if not file_path:
+            raise ValueError("No file path provided")
+
+        file_path = file_path.strip('"').strip("'")
+
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found at path: {file_path}")
+
+        # Load and validate spreadsheet
+        validator = SpreadsheetValidator(path=file_path)
+        validation_errors = validator.validate_spreadsheet_data()
+
+        if validation_errors:
+            raise ValueError("Spreadsheet has validation errors. Fix these first.")
+
+        sheets = validator.get_sheets()
+
+        # Check compatibility with existing schema
+        from backend.services.schema_compatibility_checker import (
+            SchemaCompatibilityChecker,
+        )
+
+        compatibility_checker = SchemaCompatibilityChecker(db)
+        result = compatibility_checker.check_compatibility(sheets)
+
+        return {
+            "compatible": result.is_compatible,
+            "can_auto_resolve": result.can_auto_resolve,
+            "resolution_summary": result.resolution_summary,
+            "mismatches": [
+                {
+                    "sheet_name": m.sheet_name,
+                    "type": m.mismatch_type,
+                    "message": m.message,
+                    "column_name": m.column_name,
+                    "expected": m.expected,
+                    "actual": m.actual,
+                }
+                for m in result.mismatches
+            ],
+        }
+
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail={"status": "error", "message": str(e)}
+        )
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {str(e)}")
+        raise HTTPException(
+            status_code=404, detail={"status": "error", "message": str(e)}
+        )
+    except Exception as e:
+        logger.error(f"Error checking compatibility: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "status": "error",
+                "message": f"Error checking compatibility: {str(e)}",
+            },
+        )

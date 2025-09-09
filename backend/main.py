@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from contextlib import asynccontextmanager
 
@@ -5,19 +7,27 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from backend.services.database import Database
+from backend.settings import config as cfg
+
 from .api.routes import chat, config, database, llm, spreadsheet
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application startup and shutdown events."""
     logger.info("Starting up FastAPI application")
-    # Create uploads directory if it doesn't exist
+
     if not os.path.exists("uploads"):
         os.makedirs("uploads")
         logger.info("Created uploads directory")
-    yield
-    logger.info("Shutting down FastAPI application")
+
+    app.state.db = Database.from_config(cfg)
+    try:
+        yield
+    finally:
+        app.state.db.close()
+        logger.info("DB connection closed")
+        logger.info("Shutting down FastAPI application")
 
 
 app = FastAPI(

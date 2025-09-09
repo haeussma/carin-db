@@ -10,6 +10,8 @@ from neo4j.exceptions import CypherSyntaxError
 from pydantic import BaseModel
 from pyenzyme import EnzymeMLDocument, Protein, SmallMolecule
 
+from backend.api.routes.deps import get_db
+
 from ...llm.agents import (
     ExistingMappingChoice,
     cypher_fixer_agent,
@@ -29,7 +31,6 @@ from ...llm.models import (
     SpeciesTraversal,
     SpeciesTraversalReport,
 )
-from ...services.database import get_db
 
 router = APIRouter(prefix="/chat")
 
@@ -525,9 +526,6 @@ Let's review each species traversal individually for approval.
             final_result["content"] = f"{progress_msg}\n\n{final_result['content']}"
             return final_result
 
-        current_traversal = self.mapping.measurement_species[
-            self.current_species_review_index
-        ]
         user_input_lower = user_input.lower().strip()
 
         if any(

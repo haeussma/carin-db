@@ -1,4 +1,4 @@
-import { ArrowRight, X } from "lucide-react"
+import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select"
@@ -143,7 +143,7 @@ export function SheetConnections({
                             </SelectContent>
                         </Select>
 
-                        <ArrowRight className="w-6 h-6 text-muted-foreground flex-shrink-0 hidden md:block" />
+                        <div className="w-6 h-0.5 bg-muted-foreground/30 flex-shrink-0 hidden md:block" />
 
                         {/* Edge name */}
                         <Input
@@ -153,7 +153,7 @@ export function SheetConnections({
                             className="w-full md:w-1/3"
                         />
 
-                        <ArrowRight className="w-6 h-6 text-muted-foreground flex-shrink-0 hidden md:block" />
+                        <div className="w-6 h-0.5 bg-muted-foreground/30 flex-shrink-0 hidden md:block" />
 
                         {/* Target */}
                         <Select

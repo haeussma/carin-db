@@ -350,7 +350,6 @@ export default function DatabaseNodeVisualization() {
                                             <Card key={nodeType.type}>
                                                 <CardContent className="p-4 flex items-center justify-between">
                                                     <div className="flex items-center">
-                                                        {getIconForNodeType(nodeType.type)}
                                                         <div className="ml-4">
                                                             <p className="text-sm font-medium">{nodeType.type}</p>
                                                             <p className="text-2xl font-bold">{formatNumber(nodeType.count)}</p>
@@ -433,52 +432,4 @@ export default function DatabaseNodeVisualization() {
             )}
         </div>
     )
-}
-
-// Helper function to get an icon based on node type
-function getIconForNodeType(type: string) {
-    const iconProps = { className: "h-6 w-6" }
-
-    // Map common biological/chemical entity names to appropriate icons
-    switch (type.toLowerCase()) {
-        // Original mappings
-        case "user":
-            return <Users {...iconProps} />
-        case "document":
-            return <FileText {...iconProps} />
-        case "collection":
-            return <Folder {...iconProps} />
-        case "product":
-            return <Package {...iconProps} />
-        case "server":
-            return <Server {...iconProps} />
-        case "storage":
-            return <HardDrive {...iconProps} />
-
-        // New mappings for biological/chemical entities
-        case "molecule":
-        case "compound":
-            return <Database {...iconProps} />
-        case "enzyme":
-        case "biocatalyst":
-            return <Package {...iconProps} />
-        case "peak":
-        case "signal":
-            return <HardDrive {...iconProps} />
-        case "reaction":
-        case "process":
-            return <Server {...iconProps} />
-        case "sampling":
-        case "sample":
-            return <FileText {...iconProps} />
-
-        // Default icon for any other type
-        default:
-            // If we can't find a specific icon, use the first letter of the type as an icon
-            return (
-                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/10 text-primary font-semibold text-xs">
-                    {type.charAt(0).toUpperCase()}
-                </div>
-            )
-    }
 }

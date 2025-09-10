@@ -17,7 +17,7 @@ class Attribute(BaseModel):
         cls, v: Optional[Union[str, int, float]]
     ) -> Union[str, int, float, None]:
         if isinstance(v, str) and len(v) > 20:
-            return v[:20] + "..."
+            return v[:10] + "..."
         return v
 
 

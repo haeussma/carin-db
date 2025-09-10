@@ -137,8 +137,7 @@ class SchemaCompatibilityChecker:
                 )
             )
 
-        # Could add type checking here if you track types in graph model
-        # For now, Neo4j is flexible with property types
+        # TODO: Add type checking for columns data types
 
         return mismatches
 
@@ -147,7 +146,7 @@ class SchemaCompatibilityChecker:
         if not mismatches:
             return "No schema conflicts - proceeding with upload"
 
-        summary_parts = []
+        summary_parts: list[str] = []
 
         # Group by type
         missing_sheets = [m for m in mismatches if m.mismatch_type == "missing_sheet"]

@@ -21,13 +21,19 @@ async def lifespan(app: FastAPI):
         os.makedirs("uploads")
         logger.info("Created uploads directory")
 
-    app.state.db = Database.from_config(cfg)
     try:
         yield
     finally:
-        app.state.db.close()
         logger.info("DB connection closed")
         logger.info("Shutting down FastAPI application")
+
+
+def db():
+    db = Database.from_config(cfg)
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 app = FastAPI(

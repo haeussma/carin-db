@@ -1,4 +1,4 @@
-import { ArrowRight, X, Plus } from "lucide-react"
+import { X, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select"
 import type React from "react" // Added import for React
@@ -68,7 +68,7 @@ export function References({ sheets, sheetReferences, setSheetReferences }: Refe
                                     ))}
                             </SelectContent>
                         </Select>
-                        <ArrowRight className="w-6 h-6 text-muted-foreground flex-shrink-0 hidden md:block" />
+                        <div className="w-6 h-0.5 bg-muted-foreground/30 flex-shrink-0 hidden md:block" />
                         <Select
                             onValueChange={(value) => updateReference(index, "target_sheet_name", value)}
                             value={ref.target_sheet_name}

@@ -1,11 +1,10 @@
 from typing import Annotated
 
 from agents import Runner
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body
 from loguru import logger
 from neo4j.exceptions import ClientError
 
-from backend.api.routes.deps import get_db
 from backend.llm.agents import data_analysis_agent, question_dispatcher_agent
 from backend.services.database import Database
 
@@ -15,7 +14,7 @@ router = APIRouter(prefix="/llm")
 @router.post("/ask", tags=["Chat"])
 async def ask(
     question: Annotated[str, Body()],
-    db: Annotated[Database, Depends(get_db)],
+    db: Database,
     run_count: int = 0,
 ) -> dict[str, str]:
     """Handle ask requests with provided OpenAI API key."""

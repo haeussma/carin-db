@@ -313,6 +313,7 @@ class DatabasePopulator:
 
                     props = row.to_dict()
                     props = {k: v for k, v in props.items() if not pd.isna(v)}
+                    props["_source_file"] = self.source_file
 
                     cypher = f"MERGE (n:{label} {{{pk}: $value}}) SET n += $props"
                     session.run(cypher, value=value, props=props)

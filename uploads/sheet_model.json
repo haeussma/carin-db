@@ -1,0 +1,18 @@
+{
+    "sheets": [
+        {
+            "name": "Molecule",
+            "columns": []
+        },
+        {
+            "name": "Reaction",
+            "columns": []
+        },
+        {
+            "name": "Peak",
+            "columns": []
+        }
+    ],
+    "sheet_connections": [],
+    "sheet_references": []
+}

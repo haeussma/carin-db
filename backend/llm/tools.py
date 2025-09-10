@@ -3,7 +3,7 @@ from typing import Any
 from agents import function_tool
 from loguru import logger
 
-from backend.api.routes.deps import get_db
+from backend.services.database import _get_db as get_db
 
 # ---- Agent Tools ----
 
@@ -12,7 +12,8 @@ from backend.api.routes.deps import get_db
 async def get_graph_schema():
     """Get the graph schema with information about labels, rel-types, property keys."""
     logger.debug("AGENT TOOL CALL: get_graph_schema")
-    return get_db().get_graph_info_dict
+    db = next(get_db())
+    return db.get_graph_info_dict
 
 
 @function_tool
@@ -21,7 +22,8 @@ async def execute_query(query: str):
     You can only use cypher queries that are allowed by the graph schema.
     """
     logger.debug(f"AGENT TOOL CALL: execute_query with query: {query}")
-    return get_db().execute_query(query)
+    db = next(get_db())
+    return db.execute_query(query)
 
 
 # ---- Helper Functions ----

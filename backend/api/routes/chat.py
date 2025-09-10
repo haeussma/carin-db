@@ -10,7 +10,7 @@ from neo4j.exceptions import CypherSyntaxError
 from pydantic import BaseModel
 from pyenzyme import EnzymeMLDocument, Protein, SmallMolecule
 
-from backend.api.routes.deps import get_db
+from backend.services.database import _get_db as get_db
 
 from ...llm.agents import (
     ExistingMappingChoice,
@@ -967,7 +967,8 @@ What would you like to do?""",
         logger.info(f"Small molecule query: {small_molecule_query.final_output}")
 
         # execute query
-        result = get_db().execute_query(small_molecule_query.final_output)
+        db = next(get_db())
+        result = db.execute_query(small_molecule_query.final_output)
         logger.info(f"Small molecule query result: {result}")
         logger.info(f"Small molecule query type: {type(result)}")
 
@@ -1002,7 +1003,7 @@ What would you like to do?""",
 
         # execute query
         try:
-            result = get_db().execute_query(protein_query.final_output)
+            result = db.execute_query(protein_query.final_output)
             logger.info(f"Protein query result: {result}")
             logger.info(f"Protein query type: {type(result)}")
             logger.info(f"Protein query: {protein_query.final_output}")
@@ -1012,7 +1013,7 @@ What would you like to do?""",
             result = await Runner.run(
                 starting_agent=cypher_fixer_agent, input=protein_query.final_output
             )
-            result = get_db().execute_query(result.final_output)
+            result = db.execute_query(result.final_output)
 
         # map to protein
         p = []

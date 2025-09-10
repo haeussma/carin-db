@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, List
+from typing import Annotated, Any, Generator, List
 
+import neo4j.time
+from fastapi import Depends
 from loguru import logger
 from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
 from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
 from backend.settings import Settings
+from backend.settings import config as cfg
 
 
 class DatabaseError(Exception):
@@ -29,7 +32,7 @@ class DatabaseAuthenticationError(DatabaseError):
     pass
 
 
-class Database:
+class _Database:
     def __init__(self, uri: str, username: str, password: str):
         self.uri = uri
         self.username = username
@@ -159,10 +162,13 @@ class Database:
 
         # group by label and collect attributes
         for entry in response:
+            # Convert temporal values to strings before passing to Attribute
+            example_val = _convert_temporal_to_string(entry["example"])
+
             node_dict[entry["label"]].append(
                 Attribute(
                     attr_name=entry["property"],
-                    example_val=entry["example"],
+                    example_val=example_val,
                     # attr_type=entry["data_type"],
                 )
             )
@@ -187,4 +193,24 @@ class Database:
 
     @classmethod
     def from_config(cls, config: Settings) -> Database:
-        return Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
+        return _Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
+
+
+def _get_db() -> Generator[_Database, None, None]:
+    db = _Database.from_config(cfg)
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+Database = Annotated[_Database, Depends(_get_db)]
+
+
+def _convert_temporal_to_string(value: Any) -> Any:
+    """Convert Neo4j temporal types to strings for Pydantic compatibility."""
+    if isinstance(value, (neo4j.time.DateTime, neo4j.time.Date, neo4j.time.Time)):
+        return str(value)
+    elif isinstance(value, neo4j.time.Duration):
+        return str(value)
+    return value

@@ -1,6 +1,7 @@
 import os
 
 from fastapi import APIRouter, HTTPException
+from loguru import logger
 
 from backend.models.model import SheetModel
 
@@ -26,11 +27,14 @@ async def get_sheet_model() -> SheetModel:
 @router.post("/sheet_model", tags=["Config"])
 async def save_sheet_model(sheet_model: SheetModel):
     """Saves sheet model configuration to json file in uploads directory"""
+    logger.debug("Saving sheet model configuration...")
     # Ensure uploads directory exists
     os.makedirs(os.path.dirname(SHEET_MODEL_PATH), exist_ok=True)
 
     with open(SHEET_MODEL_PATH, "w") as f:
         f.write(sheet_model.model_dump_json(indent=4))
+
+    logger.debug(f"Sheet model configuration saved successfully to {SHEET_MODEL_PATH}")
 
 
 @router.delete("/sheet_model", tags=["Config"])

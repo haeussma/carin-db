@@ -94,6 +94,14 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                                         </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
+                                <SidebarMenuItem>
+                                    <SidebarMenuButton asChild isActive={isActive("/new")} tooltip="Schema Designer">
+                                        <Link href="/new">
+                                            <PlusCircle />
+                                            <span>Schema Designer</span>
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
                             </CollapsibleContent>
                         </Collapsible>
 

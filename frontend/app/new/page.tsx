@@ -6,7 +6,6 @@ import { ReactFlowGraphCanvas } from "@/components/canvas/ReactFlowGraphCanvas"
 import { JsonPanel } from "@/components/json/JsonPanel"
 import { NodeInspector } from "@/components/inspector/NodeInspector"
 import { EdgeInspector } from "@/components/inspector/EdgeInspector"
-import { TopBar } from "@/components/layout/TopBar"
 import { useSchemaStore } from "@/store/useSchemaStore"
 
 export default function SchemaDesigner() {
@@ -44,47 +43,31 @@ export default function SchemaDesigner() {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-background">
-            <TopBar />
+        <div className="h-full w-full bg-background">
+            <ReactFlowGraphCanvas />
 
-            <div className="flex-1 flex overflow-hidden">
-                {/* Main Content */}
-                <div className="flex-1 flex flex-col">
-                    {/* Canvas */}
-                    <div className="flex-1 relative">
-                        <ReactFlowGraphCanvas />
+            {inspectorOpen && (
+                <>
+                    {/* Backdrop */}
+                    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" onClick={() => setInspectorOpen(false)} />
 
-                        {inspectorOpen && (
-                            <>
-                                {/* Backdrop */}
-                                <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40" onClick={() => setInspectorOpen(false)} />
-
-                                {/* Inspector Card */}
-                                <div
-                                    className="fixed bg-card border border-border rounded-lg shadow-xl z-50 w-[500px] max-h-[600px] overflow-y-auto"
-                                    style={{
-                                        left: inspectorPosition.x,
-                                        top: inspectorPosition.y,
-                                    }}
-                                >
-                                    {selected?.type === "node" && selected.id && (
-                                        <NodeInspector nodeId={selected.id} onClose={() => setInspectorOpen(false)} />
-                                    )}
-                                    {selected?.type === "edge" && selected.id && (
-                                        <EdgeInspector edgeId={selected.id} onClose={() => setInspectorOpen(false)} />
-                                    )}
-                                </div>
-                            </>
+                    {/* Inspector Card */}
+                    <div
+                        className="fixed bg-card border border-border rounded-lg shadow-xl z-50 w-[500px] max-h-[600px] overflow-y-auto"
+                        style={{
+                            left: inspectorPosition.x,
+                            top: inspectorPosition.y,
+                        }}
+                    >
+                        {selected?.type === "node" && selected.id && (
+                            <NodeInspector nodeId={selected.id} onClose={() => setInspectorOpen(false)} />
+                        )}
+                        {selected?.type === "edge" && selected.id && (
+                            <EdgeInspector edgeId={selected.id} onClose={() => setInspectorOpen(false)} />
                         )}
                     </div>
-
-                    {/* Bottom Panel */}
-                    <div className="h-80 border-t">
-                        <JsonPanel />
-                    </div>
-                </div>
-            </div>
-
+                </>
+            )}
             <Toaster />
         </div>
     )

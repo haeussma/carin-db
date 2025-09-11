@@ -21,12 +21,12 @@ export default function RootLayout({
       <body className={`${inter.className} bg-background text-foreground`} suppressHydrationWarning>
         <Providers>
           <SidebarProvider>
-            <div className="flex min-h-screen">
+            <div className="flex h-screen w-full">
               {/* Sidebar */}
               <DataManagerSidebar className="w-64" />
 
               {/* Main Content */}
-              <main className="flex-1">{children}</main>
+              <main className="flex-1 h-full overflow-hidden">{children}</main>
             </div>
           </SidebarProvider>
         </Providers>

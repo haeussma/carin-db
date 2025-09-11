@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,27 +10,36 @@ import { useSchemaStore } from "@/store/useSchemaStore"
 import { Plus, FolderOpen } from "lucide-react"
 
 export function ProjectSelector() {
-  const { projects, currentProjectId, selectProject, createProject } = useSchemaStore()
+  const { projects, currentProjectId, isLoading, selectProject, createProject } = useSchemaStore()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState("")
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
 
-  const handleCreateProject = () => {
+
+
+  const handleCreateProject = async () => {
     if (newProjectName.trim()) {
-      createProject(newProjectName.trim())
-      setNewProjectName("")
-      setIsCreateDialogOpen(false)
+      try {
+        const projectId = await createProject(newProjectName.trim())
+        setNewProjectName("")
+        setIsCreateDialogOpen(false)
+      } catch (error) {
+        console.error('❌ Failed to create project:', error)
+        // Still close the dialog even if backend save fails
+        setNewProjectName("")
+        setIsCreateDialogOpen(false)
+      }
     }
   }
 
   return (
     <div className="flex items-center gap-2">
       <FolderOpen className="h-4 w-4 text-muted-foreground" />
-      <Select value={currentProjectId || ""} onValueChange={selectProject}>
+      <Select value={currentProjectId || ""} onValueChange={selectProject} disabled={isLoading}>
         <SelectTrigger className="w-48">
-          <SelectValue placeholder="Select project">
-            {currentProject?.name || "No project selected"}
+          <SelectValue placeholder={isLoading ? "Loading..." : "Select project"}>
+            {isLoading ? "Loading..." : currentProject?.name || "No project available"}
           </SelectValue>
         </SelectTrigger>
         <SelectContent>

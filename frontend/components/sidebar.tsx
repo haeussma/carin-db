@@ -16,6 +16,7 @@ import {
     Settings,
     Sun,
     Moon,
+    PenBox,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useState } from 'react'
@@ -48,6 +49,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { ProjectSelector } from "@/components/layout/ProjectSelector"
 
 export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const pathname = usePathname();
@@ -60,15 +62,9 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
     return (
         <Sidebar collapsible="icon" {...props}>
             <SidebarHeader className={state === "collapsed" ? "hidden" : ""}>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg">
-                            <div className="flex flex-col gap-0.5 leading-none">
-                                <span className="font-semibold">Data Manager</span>
-                            </div>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
+                <div className="px-2 py-2">
+                    <ProjectSelector />
+                </div>
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
@@ -88,17 +84,17 @@ export function DataManagerSidebar({ ...props }: React.ComponentProps<typeof Sid
                             <CollapsibleContent>
                                 <SidebarMenuItem>
                                     <SidebarMenuButton asChild isActive={isActive("/edit")} tooltip="Edit">
-                                        <Link href="/edit">
+                                        {/* <Link href="/edit">
                                             <Edit />
                                             <span>Edit</span>
-                                        </Link>
+                                        </Link> */}
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                                 <SidebarMenuItem>
                                     <SidebarMenuButton asChild isActive={isActive("/new")} tooltip="Schema Designer">
                                         <Link href="/new">
-                                            <PlusCircle />
-                                            <span>Schema Designer</span>
+                                            <PenBox />
+                                            <span>Schema Editor</span>
                                         </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>

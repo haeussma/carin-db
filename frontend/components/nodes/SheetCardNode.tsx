@@ -1,6 +1,6 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useState, useEffect } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { useSchemaStore } from "@/store/useSchemaStore"
 import type { NodeConfig } from "@/lib/types"
 import { Star, Plus, MoreHorizontal, Trash2 } from "lucide-react"
-import { useState } from "react"
 
 interface SheetCardNodeProps extends NodeProps {
   data: {
@@ -26,6 +25,9 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
   const [newPropName, setNewPropName] = useState("")
   const [editingName, setEditingName] = useState(false)
   const [tempName, setTempName] = useState(nodeName)
+  const [editingProperty, setEditingProperty] = useState<string | null>(null)
+  const [tempPropertyName, setTempPropertyName] = useState("")
+
 
   const handleAddProperty = () => {
     if (newPropName.trim()) {
@@ -60,6 +62,37 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
     onPropertyEdit(nodeName, propName)
   }
 
+  const handlePropertyNameEdit = (propName: string) => {
+    setEditingProperty(propName)
+    setTempPropertyName(propName)
+  }
+
+  const handlePropertyRename = (oldName: string) => {
+    const newName = tempPropertyName.trim()
+
+    // If name is empty or unchanged, just cancel editing
+    if (!newName || newName === oldName) {
+      setEditingProperty(null)
+      setTempPropertyName("")
+      return
+    }
+
+    // Get the current property configuration
+    const currentProperty = nodeConfig.properties[oldName]
+    if (currentProperty) {
+      // Create new property with updated name
+      const updatedProperty = { ...currentProperty, name: newName }
+
+      console.log('🏷️ Renaming property:', { oldName, newName, property: updatedProperty })
+
+      // Use updateProperty to rename (it handles the old->new mapping)
+      updateProperty(nodeName, oldName, updatedProperty)
+    }
+
+    setEditingProperty(null)
+    setTempPropertyName("")
+  }
+
   return (
     <div className="relative w-80" data-connecting={isConnecting}>
       <Card className="w-full shadow-lg overflow-visible relative">
@@ -71,12 +104,12 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
                 onChange={(e) => setTempName(e.target.value)}
                 onBlur={handleRename}
                 onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                className="h-6 text-sm font-medium flex-1 mr-2"
+                className="h-8 text-lg font-medium flex-1 mr-2"
                 autoFocus
               />
             ) : (
               <h3
-                className="text-sm font-medium cursor-pointer hover:bg-muted px-2 rounded flex-1"
+                className="text-lg font-medium cursor-pointer hover:bg-muted px-2 py-1 rounded flex-1"
                 onClick={() => setEditingName(true)}
               >
                 {nodeName}
@@ -114,8 +147,31 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
                     />
                   </Button>
 
-                  {/* Property name */}
-                  <span className="text-xs font-medium truncate flex-1 min-w-0">{propName}</span>
+                  {/* Property name - editable */}
+                  {editingProperty === propName ? (
+                    <Input
+                      value={tempPropertyName}
+                      onChange={(e) => setTempPropertyName(e.target.value)}
+                      onBlur={() => handlePropertyRename(propName)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handlePropertyRename(propName)
+                        } else if (e.key === "Escape") {
+                          setEditingProperty(null)
+                          setTempPropertyName("")
+                        }
+                      }}
+                      className="h-5 text-xs font-medium flex-1 min-w-0 px-1"
+                      autoFocus
+                    />
+                  ) : (
+                    <span
+                      className="text-xs font-medium truncate flex-1 min-w-0 cursor-pointer hover:bg-muted px-1 rounded"
+                      onClick={() => handlePropertyNameEdit(propName)}
+                    >
+                      {propName}
+                    </span>
+                  )}
 
                   {/* Data type or reference info */}
                   <div className="flex items-center gap-1">

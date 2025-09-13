@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Annotated, Any, Generator, List
+from typing import Annotated, Any, Generator
 
 import neo4j.time
 from fastapi import Depends
@@ -9,9 +9,8 @@ from loguru import logger
 from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError, ServiceUnavailable
 
-from backend.models.graph_model import Attribute, GraphModel, Node, Relationship
-from backend.settings import Settings
-from backend.settings import config as cfg
+from ..settings import Settings
+from ..settings import config as cfg
 
 
 class DatabaseError(Exception):
@@ -65,9 +64,6 @@ class _Database:
         with self.driver.session() as session:
             return session.run(query).data()
 
-    def _connect(self):
-        return GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-
     @property
     def get_graph_info_dict(self) -> dict[str, Any]:
         """Returns a dictionary containing the graph schema information
@@ -97,7 +93,7 @@ class _Database:
             return [record["output"] for record in response]
 
     @property
-    def relationships(self) -> list[Relationship]:
+    def relationships(self) -> list[dict[str, Any]]:
         """
         Returns a list of dictionaries containing the source node label,
         relationship type, and target node label.
@@ -111,17 +107,17 @@ class _Database:
 
         with self.driver.session() as session:
             response = session.run(rel_query).data()
-            return [Relationship(**record["output"]) for record in response]
+            return [record["output"] for record in response]
 
     @property
-    def get_db_structure(self) -> GraphModel:
-        return GraphModel(
+    def get_db_structure(self) -> dict[str, Any]:
+        return dict(
             nodes=self.node_properties,
             relationships=self.relationships,
         )
 
     @property
-    def node_properties(self) -> List[Node]:
+    def node_properties(self) -> list[dict[str, Any]]:
         node_query = """
         CALL apoc.meta.nodeTypeProperties()
         YIELD
@@ -166,7 +162,7 @@ class _Database:
             example_val = _convert_temporal_to_string(entry["example"])
 
             node_dict[entry["label"]].append(
-                Attribute(
+                dict(
                     attr_name=entry["property"],
                     example_val=example_val,
                     # attr_type=entry["data_type"],
@@ -175,7 +171,7 @@ class _Database:
 
         # create nodes
         for label, attributes in node_dict.items():
-            nodes.append(Node(name=label, attributes=attributes))
+            nodes.append(dict(name=label, attributes=attributes))
 
         return nodes
 
@@ -192,7 +188,7 @@ class _Database:
         return response[0]["labels"]
 
     @classmethod
-    def from_config(cls, config: Settings) -> Database:
+    def from_config(cls, config: Settings) -> _Database:
         return _Database(config.neo4j_uri, config.neo4j_username, config.neo4j_password)
 
 

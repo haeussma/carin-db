@@ -1,15 +1,19 @@
 import { create } from "zustand"
 import type { GraphSheetModel, SheetNode, PropertyValue, Project } from "@/lib/types"
 import { validateModel, computeProgress } from "@/lib/validation"
-import { sheetModelApi, ApiError } from "@/lib/api"
+import { ApiError, projectsApi } from "@/lib/api"
 
 interface SchemaState {
   // Project management
   projects: Project[]
-  currentProjectId: string | null
+  currentProjectName: string
   isLoading: boolean
-  isSyncing: boolean
+  isSyncing: boolean,
   lastSyncError: string | null
+
+  // UI State
+  activeTab: "Editor" | "Chat" | "Graph"
+  setActiveTab: (tab: "Editor" | "Chat" | "Graph") => void
 
   // Current project state
   selected: { type: "node" | "edge" | null; id?: string; propertyName?: string }
@@ -17,24 +21,23 @@ interface SchemaState {
   progress: number
 
   // Project CRUD
-  createProject: (name?: string) => Promise<string>
-  deleteProject: (projectId: string) => Promise<void>
-  selectProject: (projectId: string) => Promise<void>
-  renameProject: (projectId: string, newName: string) => Promise<void>
+  createProject: (name: string) => Promise<string>
+  deleteProject: (projectName: string) => Promise<void>
+  selectProject: (projectName: string) => Promise<void>
+  renameProject: (projectName: string, newName: string) => Promise<void>
 
   // Backend sync
   syncWithBackend: () => Promise<void>
   loadFromBackend: () => Promise<void>
-  saveToBackend: (model?: GraphSheetModel) => Promise<void>
+  saveToBackend: (projectName?: string) => Promise<void>
 
-  // Sheet CRUD operations (updated for new structure)
+  // Sheet CRUD
   addSheet: (name?: string, position?: { x: number; y: number }) => string
   deleteSheet: (name: string) => void
   renameSheet: (oldName: string, newName: string) => void
-  setUniqueProperty: (sheetName: string, propName: string | null) => void
   updateSheetPosition: (sheetName: string, position: { x: number; y: number }) => void
 
-  // Property CRUD operations (updated for new structure)
+  // Property CRUD
   addProperty: (sheetName: string, property: PropertyValue) => void
   updateProperty: (sheetName: string, oldName: string, property: PropertyValue) => void
   removeProperty: (sheetName: string, propName: string) => void
@@ -52,25 +55,18 @@ interface SchemaState {
   recomputeIssues: () => void
 
   // Import/Export
-  importJson: (json: any) => void
-  exportJson: () => string
-  loadFromSpreadsheet: (sheets: Record<string, string[]>) => void
-
+  importSchema: (file: File, projectName?: string) => Promise<void>
 
   // Getters
-  getCurrentProject: () => Project | null
-  getCurrentModel: () => GraphSheetModel | null
+  getCurrentProject: () => Project  // Always returns a project
 }
-
 
 const createInitialModel = (projectName: string): GraphSheetModel => ({
   project_name: projectName,
-  version: 1,
   created_at: new Date().toISOString(),
   sheets: [
     {
       name: "Measurement",
-      unique_property: "id",
       properties: [
         { kind: "value", name: "id", dtype: "str", unique: true },
         { kind: "value", name: "value", dtype: "float", unique: false },
@@ -81,715 +77,502 @@ const createInitialModel = (projectName: string): GraphSheetModel => ({
   ],
 })
 
-// Create default project
-const defaultProject = {
-  id: "example-project",
-  name: "Example",
-  model: createInitialModel("Example"),
-  last_modified: new Date().toISOString()
-}
+export const useSchemaStore = create<SchemaState>()((set, get) => {
+  // ---- helpers -------------------------------------------------------------
 
-export const useSchemaStore = create<SchemaState>()((set, get) => ({
-  projects: [defaultProject],
-  currentProjectId: "example-project",
-  isLoading: false,  // Start ready with default project
-  isSyncing: false,
-  lastSyncError: null,
-  selected: { type: null },
-  issues: [],
-  progress: 0,
+  const setError = (err: unknown, fallback: string) => {
+    const msg = err instanceof ApiError || err instanceof Error ? err.message : fallback
+    set({ lastSyncError: msg })
+    console.error(fallback, err)
+  }
 
-  createProject: async (name) => {
-    try {
-      const projectName = name || `Project ${get().projects.length + 1}`
-      const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const newProject: Project = {
-        id: projectId,
-        name: projectName,
-        model: createInitialModel(projectName),
-        last_modified: new Date().toISOString(),
-      }
-
-      set((state) => ({
-        projects: [...state.projects, newProject],
-        currentProjectId: projectId,
-      }))
-
-      // Save to backend
-      await get().saveToBackend(newProject.model)
-
-      // Ensure recomputeIssues is called after state is updated
-      setTimeout(() => get().recomputeIssues(), 0)
-      return projectId
-    } catch (error) {
-      console.error("Failed to create project:", error)
-      set({ lastSyncError: error instanceof Error ? error.message : 'Failed to create project' })
-      return ""
+  const getCurrentProject = (): Project => {
+    const { projects, currentProjectName } = get()
+    const project = projects.find(p => p.name === currentProjectName)
+    if (!project) {
+      throw new Error(`Current project '${currentProjectName}' not found in projects list`)
     }
-  },
+    console.log('🔍 getCurrentProject:', { currentProjectName, projectsCount: projects.length, found: true })
+    return project
+  }
 
-  deleteProject: async (projectId) => {
-    const state = get()
-    const wasCurrentProject = state.currentProjectId === projectId
 
-    set((state) => ({
-      projects: state.projects.filter((p) => p.id !== projectId),
-      currentProjectId:
-        state.currentProjectId === projectId
-          ? state.projects.length > 1
-            ? state.projects.find((p) => p.id !== projectId)?.id || null
-            : null
-          : state.currentProjectId,
+  const getUniqueProperties = (sheet: SheetNode): string[] => {
+    return sheet.properties.filter(prop => prop.unique).map(prop => prop.name)
+  }
+
+  const touch = (p: Project) => ({ ...p, last_modified: new Date().toISOString() })
+
+  /** mutate current project immutably, recompute issues, and save */
+  const updateCurrent = (mutator: (p: Project) => Project) => {
+    const current = getCurrentProject() // Always exists now
+    set(s => ({
+      projects: s.projects.map(p => (p.name === current.name ? touch(mutator(p)) : p)),
     }))
+    get().recomputeIssues()
+    // best effort save (no await here so UI stays snappy)
+    void get().saveToBackend(current.name)
+  }
 
-    // If we deleted the current project, sync the new current project to backend
-    if (wasCurrentProject) {
-      const newActiveProject = get().getCurrentProject()
-      if (newActiveProject) {
-        await get().saveToBackend(newActiveProject.model)
-      } else {
-        // No projects left, clear backend
-        try {
-          await sheetModelApi.delete()
-        } catch (error) {
-          // Ignore 404 errors when deleting
-          if (!(error instanceof ApiError && error.status === 404)) {
-            console.error("Failed to clear backend:", error)
-          }
+  // ---- store ---------------------------------------------------------------
+
+  return {
+    projects: [],
+    currentProjectName: 'new', // Always has a value
+    isLoading: true,
+    isSyncing: false,
+    lastSyncError: null,
+
+    // UI State
+    activeTab: "Editor" as "Editor" | "Chat" | "Graph",
+    setActiveTab: (tab) => set({ activeTab: tab }),
+
+    selected: { type: null },
+    issues: [],
+    progress: 0,
+
+    // -------- Project CRUD --------
+
+    createProject: async (name: string) => {
+      try {
+        const baseName = name.trim()
+        const { projects } = get()
+
+        // Ensure unique project name
+        let projectName = baseName
+        let counter = 1
+        while (projects.some(p => p.name === projectName)) {
+          projectName = `${baseName}_${counter}`
+          counter++
         }
-      }
-    }
-  },
 
-  selectProject: async (projectId) => {
-    set({ currentProjectId: projectId, selected: { type: null } })
-
-    // Sync the selected project with backend
-    const activeProject = get().getCurrentProject()
-    if (activeProject) {
-      await get().saveToBackend(activeProject.model)
-    }
-
-    get().recomputeIssues()
-  },
-
-  renameProject: async (projectId, newName) => {
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === projectId
-          ? {
-            ...p,
-            name: newName,
-            model: { ...p.model, project_name: newName },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-
-    // If this is the current project, sync to backend
-    if (get().currentProjectId === projectId) {
-      const activeProject = get().getCurrentProject()
-      if (activeProject) {
-        await get().saveToBackend(activeProject.model)
-      }
-    }
-  },
-
-  addSheet: (name, position) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return ""
-
-    const existingSheets = activeProject.model.sheets.map((s) => s.name)
-    let sheetName = name
-    if (!sheetName) {
-      let counter = 1
-      do {
-        sheetName = `Sheet${counter}`
-        counter++
-      } while (existingSheets.includes(sheetName))
-    }
-
-    const newSheet: SheetNode = {
-      name: sheetName,
-      unique_property: null,
-      properties: [{ kind: "value", name: "id", dtype: "str", unique: true }],
-      position: position,
-    }
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: { ...p.model, sheets: [...p.model.sheets, newSheet] },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-
-    return sheetName
-  },
-
-  deleteSheet: (name) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets
-                .filter((s) => s.name !== name)
-                .map((sheet) => ({
-                  ...sheet,
-                  properties: (sheet.properties || []).filter((prop) => prop.kind !== "ref" || prop.to !== name),
-                })),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-      selected: state.selected.id === name ? { type: null } : state.selected,
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  renameSheet: (oldName, newName) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) => ({
-                ...sheet,
-                name: sheet.name === oldName ? newName : sheet.name,
-                properties: (sheet.properties || []).map((prop) =>
-                  prop.kind === "ref" && prop.to === oldName ? { ...prop, to: newName } : prop,
-                ),
-              })),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-      selected: state.selected.id === oldName ? { ...state.selected, id: newName } : state.selected,
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  setUniqueProperty: (sheetName, propName) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) =>
-                sheet.name === sheetName ? { ...sheet, unique_property: propName } : sheet,
-              ),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  updateSheetPosition: (sheetName, position) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) =>
-                sheet.name === sheetName ? { ...sheet, position } : sheet,
-              ),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  addProperty: (sheetName, property) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) =>
-                sheet.name === sheetName ? { ...sheet, properties: [...sheet.properties, property] } : sheet,
-              ),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  updateProperty: (sheetName, oldName, property) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) => {
-                if (sheet.name === sheetName) {
-                  // Update the property in the target sheet
-                  return {
-                    ...sheet,
-                    properties: (sheet.properties || []).map((prop) => (prop.name === oldName ? property : prop)),
-                  }
-                } else {
-                  // Update any references in other sheets that point to the renamed property
-                  return {
-                    ...sheet,
-                    properties: (sheet.properties || []).map((prop) => {
-                      if (prop.kind === 'ref' && prop.to === sheetName && prop.on === oldName) {
-                        return {
-                          ...prop,
-                          on: property.name, // Update the target property name
-                        }
-                      }
-                      return prop
-                    }),
-                  }
-                }
-              }),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  removeProperty: (sheetName, propName) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) =>
-                sheet.name === sheetName
-                  ? {
-                    ...sheet,
-                    properties: (sheet.properties || []).filter((prop) => prop.name !== propName),
-                    unique_property: sheet.unique_property === propName ? null : sheet.unique_property,
-                  }
-                  : sheet,
-              ),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  createOrUpdateRef: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
-    const currentModel = get().getCurrentModel()
-    if (!currentModel) return
-
-    const targetSheetConfig = currentModel.sheets.find((s) => s.name === targetSheet)
-
-    // Use provided targetProp or fall back to the sheet's unique_property
-    const targetProperty = targetProp || targetSheetConfig?.unique_property
-
-    if (!targetProperty) return
-
-    // Use custom edge name if provided, otherwise use consistent HAS_ format
-    const edgeName = customEdgeName || `HAS_${sourceProp.toUpperCase()}`
-
-    const refProperty: PropertyValue = {
-      kind: "ref",
-      name: sourceProp,
-      to: targetSheet,
-      on: targetProperty,
-      edge: edgeName,
-      multi: { sep: ",", trim: true, allow_empty: false },
-      case: "insensitive",
-      on_miss: "error",
-      unique: false,
-    }
-
-    get().updateProperty(sourceSheet, sourceProp, refProperty)
-  },
-
-  replaceSheetConnection: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
-    const currentModel = get().getCurrentModel()
-    if (!currentModel) return
-
-    const targetSheetConfig = currentModel.sheets.find((s) => s.name === targetSheet)
-
-    // Use provided targetProp or fall back to the sheet's unique_property
-    const targetProperty = targetProp || targetSheetConfig?.unique_property
-
-    if (!targetProperty) return
-
-    // Use custom edge name if provided, otherwise use consistent HAS_ format
-    const edgeName = customEdgeName || `HAS_${sourceProp.toUpperCase()}`
-
-    const refProperty: PropertyValue = {
-      kind: "ref",
-      name: sourceProp,
-      to: targetSheet,
-      on: targetProperty,
-      edge: edgeName,
-      multi: { sep: ",", trim: true, allow_empty: false },
-      case: "insensitive",
-      on_miss: "error",
-      unique: false,
-    }
-
-    // Atomic operation: replace all refs to the target sheet with the new one
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: {
-              ...p.model,
-              sheets: p.model.sheets.map((sheet) => {
-                if (sheet.name === sourceSheet) {
-                  return {
-                    ...sheet,
-                    properties: [
-                      // Keep all non-ref properties and refs to other sheets
-                      ...sheet.properties.filter(prop =>
-                        prop.kind !== "ref" || prop.to !== targetSheet
-                      ),
-                      // Add the new ref property
-                      refProperty
-                    ],
-                  }
-                }
-                return sheet
-              }),
-            },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-  selectNode: (nodeId, propertyName) => {
-    set({ selected: { type: "node", id: nodeId, propertyName } })
-  },
-
-  selectEdge: (edgeId) => {
-    set({ selected: { type: "edge", id: edgeId } })
-  },
-
-  clearSelection: () => {
-    set({ selected: { type: null } })
-  },
-
-  updateEdge: (edgeId, patch) => {
-    const [sourceSheet, sourceProp] = edgeId.split(".")
-    const currentModel = get().getCurrentModel()
-    if (!currentModel) return
-
-    const sourceSheetConfig = currentModel.sheets.find((s) => s.name === sourceSheet)
-    const currentProp = (sourceSheetConfig?.properties || []).find((p) => p.name === sourceProp)
-
-    if (currentProp && currentProp.kind === "ref") {
-      get().updateProperty(sourceSheet, sourceProp, { ...currentProp, ...patch })
-    }
-  },
-
-  deleteEdge: (edgeId) => {
-    const [sourceSheet, sourceProp] = edgeId.split(".")
-    get().removeProperty(sourceSheet, sourceProp)
-  },
-
-  recomputeIssues: () => {
-    const currentModel = get().getCurrentModel()
-    if (!currentModel) {
-      set({ issues: [], progress: 0 })
-      return
-    }
-
-    const issues = validateModel(currentModel)
-    const progress = computeProgress(currentModel, issues)
-    set({ issues, progress })
-  },
-
-  importJson: (json) => {
-    try {
-      const activeProject = get().getCurrentProject()
-      if (!activeProject) return
-
-      set((state) => ({
-        projects: state.projects.map((p) =>
-          p.id === state.currentProjectId ? { ...p, model: json, last_modified: new Date().toISOString() } : p,
-        ),
-      }))
-      get().recomputeIssues()
-    } catch (error) {
-      console.error("Failed to import JSON:", error)
-    }
-  },
-
-  exportJson: () => {
-    const currentModel = get().getCurrentModel()
-    return currentModel ? JSON.stringify(currentModel, null, 2) : "{}"
-  },
-
-  loadFromSpreadsheet: (sheets) => {
-    const activeProject = get().getCurrentProject()
-    if (!activeProject) return
-
-    const newSheets: SheetNode[] = []
-
-    Object.entries(sheets).forEach(([sheetName, columns]) => {
-      const properties: PropertyValue[] = columns.map((col, index) => ({
-        kind: "value" as const,
-        name: col,
-        dtype: "str" as const,
-        unique: index === 0, // First column is unique by default
-      }))
-
-      newSheets.push({
-        name: sheetName,
-        unique_property: columns[0] || null,
-        properties,
-      })
-    })
-
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === state.currentProjectId
-          ? {
-            ...p,
-            model: { ...p.model, sheets: newSheets },
-            last_modified: new Date().toISOString(),
-          }
-          : p,
-      ),
-    }))
-    get().recomputeIssues()
-
-    // Auto-sync with backend if this is the current project
-    const currentProj = get().getCurrentProject()
-    if (currentProj) {
-      get().saveToBackend(currentProj.model).catch(console.error)
-    }
-  },
-
-
-  getCurrentProject: () => {
-    const { projects, currentProjectId } = get()
-    return projects.find((p) => p.id === currentProjectId) || null
-  },
-
-  getCurrentModel: () => {
-    const activeProject = get().getCurrentProject()
-    return activeProject?.model || null
-  },
-
-  // Backend sync functions
-  syncWithBackend: async () => {
-    set({ isSyncing: true, lastSyncError: null })
-    try {
-      await get().loadFromBackend()
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Sync failed'
-      set({ lastSyncError: errorMessage })
-      console.error("Failed to sync with backend:", error)
-    } finally {
-      set({ isSyncing: false })
-    }
-  },
-
-  loadFromBackend: async () => {
-    set({ isLoading: true, lastSyncError: null })
-    try {
-      const backendModel = await sheetModelApi.get()
-
-      // Find existing project with this model or create new one
-      const state = get()
-      let existingProject = state.projects.find(p =>
-        p.model.project_name === backendModel.project_name
-      )
-
-      if (existingProject) {
-        // Update existing project with backend data
-        set((state) => ({
-          projects: state.projects.map(p =>
-            p.id === existingProject!.id
-              ? { ...p, model: backendModel, last_modified: new Date().toISOString() }
-              : p
-          ),
-          currentProjectId: existingProject.id,
-        }))
-      } else {
-        // Create new project from backend model
-        const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        const newProject: Project = {
-          id: projectId,
-          name: backendModel.project_name,
-          model: backendModel,
+        const project: Project = {
+          name: projectName,
+          model: createInitialModel(projectName),
           last_modified: new Date().toISOString(),
         }
 
-        set((state) => ({
-          projects: [...state.projects, newProject],
-          currentProjectId: projectId,
-        }))
-      }
-
-      get().recomputeIssues()
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        // Backend empty → create a local sample
-        console.log("No backend model found, creating default project")
-        const sample = createInitialModel("Example")
-        const projectId = `project-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-        set((state) => ({
-          projects: [...state.projects, { id: projectId, name: "Example", model: sample, last_modified: new Date().toISOString() }],
-          currentProjectId: projectId,
+        set(s => ({
+          projects: [...s.projects, project],
+          currentProjectName: project.name,
         }))
         get().recomputeIssues()
-        // Optional: persist to backend
-        get().saveToBackend(sample).catch(() => { })
+
+        await projectsApi.save(project)
+        return project.name
+      } catch (e) {
+        setError(e, "Failed to create project")
+        return ""
+      }
+    },
+
+    deleteProject: async (projectName) => {
+      const proj = get().projects.find(p => p.name === projectName)
+      if (!proj) {
+        set(s => ({ projects: s.projects.filter(p => p.name !== projectName) }))
         return
-      } else {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to load from backend'
-        set({ lastSyncError: errorMessage })
-        console.error("Failed to load from backend:", error)
       }
-    } finally {
-      set({ isLoading: false })
-    }
-  },
-
-  saveToBackend: async (model?: GraphSheetModel) => {
-    set({ isSyncing: true, lastSyncError: null })
-    try {
-      const modelToSave = model || get().getCurrentModel()
-      if (modelToSave) {
-        await sheetModelApi.save(modelToSave)
-
-        // Update last_modified timestamp for current project
-        const currentProjectId = get().currentProjectId
-        if (currentProjectId) {
-          set((state) => ({
-            projects: state.projects.map(p =>
-              p.id === currentProjectId
-                ? { ...p, last_modified: new Date().toISOString() }
-                : p
-            ),
-          }))
+      try {
+        await projectsApi.remove(proj.name)
+      } catch (e) {
+        // keep going even if backend delete fails
+        console.warn("Backend delete failed:", e)
+      }
+      set(s => {
+        const remaining = s.projects.filter(p => p.name !== projectName)
+        // Always ensure a project is selected
+        let newCurrentProjectName: string
+        if (s.currentProjectName === projectName) {
+          if (remaining.length > 0) {
+            newCurrentProjectName = remaining[0].name
+          } else {
+            // If no projects remain, reload from backend to get/create default
+            void get().loadFromBackend()
+            return s // Don't update state, let loadFromBackend handle it
+          }
+        } else {
+          newCurrentProjectName = s.currentProjectName
         }
+        return {
+          projects: remaining,
+          currentProjectName: newCurrentProjectName,
+        }
+      })
+      get().recomputeIssues()
+    },
+
+    selectProject: async (projectName) => {
+      set({ currentProjectName: projectName, selected: { type: null } })
+      get().recomputeIssues()
+    },
+
+    renameProject: async (projectName, newName) => {
+      const proj = get().projects.find(p => p.name === projectName)
+      if (!proj) return
+      const oldName = proj.name
+      const updated: Project = {
+        ...proj,
+        name: newName,
+        model: { ...proj.model, project_name: newName },
+        last_modified: new Date().toISOString(),
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to save to backend'
-      set({ lastSyncError: errorMessage })
-      console.warn("Backend save failed, continuing with local changes:", error)
-      // Don't re-throw the error - allow the app to continue working locally
-      // The user will see the error message but can still use the app
-    } finally {
-      set({ isSyncing: false })
-    }
-  },
-}))
+
+      // optimistic local update
+      set(s => ({
+        projects: s.projects.map(p => (p.name === projectName ? updated : p)),
+        currentProjectName: s.currentProjectName === projectName ? updated.name : s.currentProjectName,
+      }))
+      get().recomputeIssues()
+
+      try {
+        await projectsApi.save(updated)
+        if (oldName !== newName) {
+          try { await projectsApi.remove(oldName) } catch { }
+        }
+      } catch (e) {
+        setError(e, "Rename failed")
+      }
+    },
+
+    // -------- Backend sync --------
+
+    syncWithBackend: async () => {
+      set({ isSyncing: true, lastSyncError: null })
+      try {
+        await get().loadFromBackend()
+      } finally {
+        set({ isSyncing: false })
+      }
+    },
+
+    loadFromBackend: async () => {
+      set({ isLoading: true, lastSyncError: null })
+      try {
+        console.log("😎 Loading projects from backend")
+        const projects = await projectsApi.loadAll()
+
+        const { currentProjectName } = get()
+
+        if (projects.length === 0) {
+          // No projects exist - create a default project and save it
+          const defaultProject: Project = {
+            name: "My Project",
+            model: createInitialModel("My Project"),
+            last_modified: new Date().toISOString(),
+          }
+
+          // Save the default project to backend
+          await projectsApi.save(defaultProject)
+
+          set({ projects: [defaultProject], currentProjectName: defaultProject.name });
+          console.log("✅ Created and saved default project:", defaultProject.name)
+        } else {
+          // Projects exist - ensure one is always selected
+          let selectedProject: string
+
+          if (projects.find(p => p.name === currentProjectName)) {
+            // Current selection is still valid
+            selectedProject = currentProjectName
+          } else {
+            // Select most recently modified project
+            const mostRecent = projects.reduce((a, b) =>
+              new Date(a.last_modified) > new Date(b.last_modified) ? a : b
+            );
+            selectedProject = mostRecent.name
+          }
+
+          set({ projects, currentProjectName: selectedProject });
+          console.log("✅ Auto-selected project:", selectedProject)
+        }
+        get().recomputeIssues()
+      } catch (e) {
+        console.error("😡 Failed to load projects from backend", e)
+        setError(e, "Failed to load from backend")
+
+        // Fallback: create a local default project if backend fails
+        const fallbackProject: Project = {
+          name: "Local Project",
+          model: createInitialModel("Local Project"),
+          last_modified: new Date().toISOString(),
+        }
+        set({ projects: [fallbackProject], currentProjectName: fallbackProject.name });
+        console.log("⚠️ Created fallback project due to backend error")
+      } finally {
+        set({ isLoading: false })
+        console.log("😎 Loaded projects from backend")
+      }
+    },
+
+    saveToBackend: async (projectName?: string) => {
+      set({ isSyncing: true, lastSyncError: null })
+      try {
+        const project = projectName
+          ? get().projects.find(p => p.name === projectName)
+          : getCurrentProject() // Always exists now
+
+        if (!project) {
+          console.warn('Project not found for save:', projectName)
+          return
+        }
+
+        const toSave: Project = { ...project, last_modified: new Date().toISOString() }
+        await projectsApi.save(toSave)
+
+        // Update the project in the store with the new timestamp
+        set(s => ({
+          projects: s.projects.map(p => (p.name === project.name ? toSave : p)),
+        }))
+      } catch (e) {
+        setError(e, "Failed to save to backend")
+      } finally {
+        set({ isSyncing: false })
+      }
+    },
+
+
+    // -------- Sheets --------
+
+    addSheet: (name, position) => {
+      const current = getCurrentProject() // Always exists now
+      const existing = new Set(current.model.sheets.map(s => s.name))
+      let sheetName = name
+      if (!sheetName) {
+        let i = 1
+        while (existing.has(`Sheet${i}`)) i++
+        sheetName = `Sheet${i}`
+      }
+
+      // Ensure unique name even if provided name conflicts
+      let uniqueName = sheetName
+      let counter = 1
+      while (existing.has(uniqueName)) {
+        uniqueName = `${sheetName}_${counter}`
+        counter++
+      }
+
+      const newSheet: SheetNode = {
+        name: uniqueName,
+        properties: [{ kind: "value", name: "id", dtype: "str", unique: true }],
+        position,
+      }
+      updateCurrent(p => ({ ...p, model: { ...p.model, sheets: [...p.model.sheets, newSheet] } }))
+      return uniqueName
+    },
+
+    deleteSheet: (name) => {
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets
+            .filter(s => s.name !== name)
+            .map(s => ({
+              ...s,
+              properties: s.properties.filter(prop => prop.kind !== "ref" || prop.to !== name),
+            })),
+        },
+      }))
+      set(s => ({ selected: s.selected.id === name ? { type: null } : s.selected }))
+    },
+
+    renameSheet: (oldName, newName) => {
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(sheet => ({
+            ...sheet,
+            name: sheet.name === oldName ? newName : sheet.name,
+            properties: sheet.properties.map(prop =>
+              prop.kind === "ref" && prop.to === oldName ? { ...prop, to: newName } : prop
+            ),
+          })),
+        },
+      }))
+      set(s => ({ selected: s.selected.id === oldName ? { ...s.selected, id: newName } : s.selected }))
+    },
+
+
+    updateSheetPosition: (sheetName, position) => {
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(s => (s.name === sheetName ? { ...s, position } : s)),
+        },
+      }))
+    },
+
+    // -------- Properties --------
+
+    addProperty: (sheetName, property) => {
+      const current = getCurrentProject() // Always exists now
+      const sheet = current.model.sheets.find(s => s.name === sheetName)
+      if (!sheet) return
+
+      // Check for duplicate property names
+      const existingNames = sheet.properties.map(p => p.name)
+      if (existingNames.includes(property.name)) {
+        console.warn(`Property "${property.name}" already exists in sheet "${sheetName}"`)
+        return // Don't add duplicate
+      }
+
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(s => (s.name === sheetName ? { ...s, properties: [...s.properties, property] } : s)),
+        },
+      }))
+    },
+
+    updateProperty: (sheetName, oldName, property) => {
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(sheet => {
+            if (sheet.name === sheetName) {
+              return {
+                ...sheet,
+                properties: sheet.properties.map(prop => (prop.name === oldName ? property : prop)),
+              }
+            }
+            return {
+              ...sheet,
+              properties: sheet.properties.map(prop =>
+                prop.kind === "ref" && prop.to === sheetName && prop.on === oldName
+                  ? { ...prop, on: property.name }
+                  : prop
+              ),
+            }
+          }),
+        },
+      }))
+    },
+
+    removeProperty: (sheetName, propName) => {
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(sheet =>
+            sheet.name === sheetName
+              ? {
+                ...sheet,
+                properties: sheet.properties.filter(prop => prop.name !== propName),
+              }
+              : sheet
+          ),
+        },
+      }))
+    },
+
+    // -------- Graph actions --------
+    createOrUpdateRef: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
+      const model = getCurrentProject().model // Always exists now
+      const target = model.sheets.find(s => s.name === targetSheet)
+      if (!target) return
+      const uniqueProps = getUniqueProperties(target)
+      const on = targetProp ?? (uniqueProps.length > 0 ? uniqueProps[0] : null)
+      if (!on) return
+      const edgeName = customEdgeName || `HAS_${sourceProp.toUpperCase()}`
+      const ref: PropertyValue = {
+        kind: "ref",
+        name: sourceProp,
+        to: targetSheet,
+        on,
+        edge: edgeName,
+        multi: { sep: ",", trim: true, allow_empty: false },
+        case: "insensitive",
+        on_miss: "error",
+        unique: false,
+      }
+      get().updateProperty(sourceSheet, sourceProp, ref)
+    },
+
+    replaceSheetConnection: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
+      const model = getCurrentProject().model // Always exists now
+      const target = model.sheets.find(s => s.name === targetSheet)
+      if (!target) return
+      const uniqueProps = getUniqueProperties(target)
+      const on = targetProp ?? (uniqueProps.length > 0 ? uniqueProps[0] : null)
+      if (!on) return
+      const edgeName = customEdgeName || `HAS_${sourceProp.toUpperCase()}`
+      const ref: PropertyValue = {
+        kind: "ref",
+        name: sourceProp,
+        to: targetSheet,
+        on,
+        edge: edgeName,
+        multi: { sep: ",", trim: true, allow_empty: false },
+        case: "insensitive",
+        on_miss: "error",
+        unique: false,
+      }
+      updateCurrent(p => ({
+        ...p,
+        model: {
+          ...p.model,
+          sheets: p.model.sheets.map(sheet =>
+            sheet.name === sourceSheet
+              ? {
+                ...sheet,
+                properties: [
+                  ...sheet.properties.filter(prop => !(prop.kind === "ref" && prop.to === targetSheet && prop.name === sourceProp)),
+                  ref,
+                ],
+              }
+              : sheet
+          ),
+        },
+      }))
+    },
+
+    selectNode: (nodeId, propertyName) => set({ selected: { type: "node", id: nodeId, propertyName } }),
+    selectEdge: (edgeId) => set({ selected: { type: "edge", id: edgeId } }),
+    clearSelection: () => set({ selected: { type: null } }),
+
+    updateEdge: (edgeId, patch) => {
+      const [sourceSheet, sourceProp] = edgeId.split(".")
+      const model = getCurrentProject().model // Always exists now
+      const source = model.sheets.find(s => s.name === sourceSheet)
+      const curr = source?.properties.find(p => p.name === sourceProp)
+      if (curr && curr.kind === "ref") {
+        get().updateProperty(sourceSheet, sourceProp, { ...curr, ...patch })
+      }
+    },
+
+    deleteEdge: (edgeId) => {
+      const [sourceSheet, sourceProp] = edgeId.split(".")
+      get().removeProperty(sourceSheet, sourceProp)
+    },
+
+    // -------- Validation / Import / Export --------
+
+    recomputeIssues: () => {
+      const model = getCurrentProject().model // Always exists now
+      const issues = validateModel(model)
+      const progress = computeProgress(model, issues)
+      set({ issues, progress })
+    },
+
+    importSchema: async (file: File, projectName?: string) => {
+      try {
+        const name = projectName ?? `Imported Project ${Date.now()}`;
+        await projectsApi.importSchema(file, name);
+
+        // Refresh the store to get the updated project state from backend
+        await get().loadFromBackend();
+        console.log('🔄 Imported schema and refreshed store state');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Import failed';
+        set({ lastSyncError: msg });
+        throw e;
+      }
+    },
+
+    // getters
+    getCurrentProject,
+  }
+})

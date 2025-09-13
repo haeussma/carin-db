@@ -1,140 +1,101 @@
-/**
- * API utilities for backend communication
- */
+import type { Project } from "./types"
 
-import type { GraphSheetModel } from './types'
-
-const API_BASE = '/api'
+const API_BASE = "/api"
 
 export class ApiError extends Error {
     constructor(public status: number, message: string) {
-        super(message)
-        this.name = 'ApiError'
+        super(message || `HTTP ${status}`)
+        this.name = "ApiError"
     }
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-    try {
-        const response = await fetch(url, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options?.headers,
-            },
-            ...options,
-        })
-
-        if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Unknown error')
-
-            // Provide more user-friendly error messages
-            if (response.status === 404) {
-                throw new ApiError(response.status, 'Backend service not available. Please ensure the backend server is running.')
-            } else if (response.status === 500) {
-                throw new ApiError(response.status, 'Server error occurred. Please try again later.')
-            } else {
-                throw new ApiError(response.status, errorText)
-            }
-        }
-
-        return response.json()
-    } catch (error) {
-        if (error instanceof ApiError) {
-            throw error
-        }
-        // Network or other errors
-        throw new ApiError(0, 'Network error: Unable to connect to backend service. Please ensure the backend server is running.')
+function withJsonHeaders(init: RequestInit | undefined) {
+    const isForm = init?.body instanceof FormData
+    const headers = new Headers(init?.headers)
+    if (!headers.has("Accept")) headers.set("Accept", "application/json")
+    if (!isForm && init?.body && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json")
     }
+    return { ...init, headers }
 }
 
-/**
- * Backend sheet model API
- */
-export const sheetModelApi = {
-    /**
-     * Get the current sheet model from backend
-     */
-    async get(): Promise<GraphSheetModel> {
-        return fetchJson<GraphSheetModel>(`${API_BASE}/config/sheet_model`)
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(url, withJsonHeaders(init))
+
+    if (!res.ok) {
+        // Best-effort error text
+        let msg = res.statusText
+        try {
+            const ct = res.headers.get("content-type") || ""
+            msg = ct.includes("application/json") ? JSON.stringify(await res.json()) : await res.text()
+        } catch { }
+        throw new ApiError(res.status, msg)
+    }
+
+    if (res.status === 204) {
+        // Endpoint deliberately returned no content (DELETE, some POSTs)
+        return undefined as unknown as T
+    }
+
+    // Prefer JSON, but allow text (e.g., status endpoints)
+    const ct = res.headers.get("content-type") || ""
+    if (ct.includes("application/json")) return (await res.json()) as T
+    return (await res.text()) as unknown as T
+}
+
+// Tiny verb helpers so call sites stay clean
+const get = <T>(path: string) => request<T>(`${API_BASE}${path}`)
+const postJson = <T>(path: string, body: unknown) =>
+    request<T>(`${API_BASE}${path}`, { method: "POST", body: JSON.stringify(body) })
+const del = (path: string) => request<void>(`${API_BASE}${path}`, { method: "DELETE" })
+const postForm = <T>(path: string, fd: FormData) =>
+    request<T>(`${API_BASE}${path}`, { method: "POST", body: fd })
+
+const enc = encodeURIComponent
+const projPath = (name: string) => `/projects/${enc(name)}`
+
+export const projectsApi = {
+    /** GET /projects/load -> Project[] */
+    loadAll(): Promise<Project[]> {
+        console.log('🔍 API: Loading all projects')
+        return get<Project[]>("/projects/load")
     },
 
-    /**
-     * Save sheet model to backend
-     */
-    async save(model: GraphSheetModel): Promise<void> {
-        await fetchJson(`${API_BASE}/config/sheet_model`, {
-            method: 'POST',
-            body: JSON.stringify(model),
-        })
+    /** GET /projects/{project_name} -> Project */
+    getOne(projectName: string): Promise<Project> {
+        return get<Project>(projPath(projectName))
     },
 
-    /**
-     * Delete sheet model from backend
-     */
-    async delete(): Promise<void> {
-        await fetchJson(`${API_BASE}/config/sheet_model`, {
-            method: 'DELETE',
-        })
+    /** POST /projects/{project_name} (body: Project) -> void */
+    save(project: Project): Promise<void> {
+        console.log('🔍 API: Saving project:', project.name, project)
+        // Backend returns None (204), so we don't expect a response
+        return postJson<void>(projPath(project.name), project)
+    },
+
+    /** DELETE /projects/{project_name} -> 204 No Content */
+    remove(projectName: string): Promise<void> {
+        // Treat as void; do NOT expect JSON
+        return del(projPath(projectName))
+    },
+
+    /** POST /spreadsheet/upload-schema?project_name=... (multipart) -> 204 */
+    async importSchema(file: File, projectName: string): Promise<void> {
+        const fd = new FormData()
+        fd.append("file", file)
+        const qs = new URLSearchParams({ project_name: projectName }).toString()
+        await postForm<void>(`/spreadsheet/upload-schema?${qs}`, fd)
     },
 }
 
-/**
- * Database API
- */
 export const databaseApi = {
-    /**
-     * Get database status
-     */
-    async getStatus(): Promise<any> {
-        return fetchJson(`${API_BASE}/database/status`)
+    getStatus(): Promise<any> {
+        return get("/database/status")
     },
-
-    /**
-     * Get database structure
-     */
-    async getStructure(): Promise<any> {
-        return fetchJson(`${API_BASE}/database/db_structure`)
+    getStructure(): Promise<any> {
+        return get("/database/db_structure")
     },
-
-    /**
-     * Delete all data
-     */
-    async deleteAll(): Promise<void> {
-        await fetchJson(`${API_BASE}/database/delete_all`, {
-            method: 'DELETE',
-        })
-    },
-}
-
-/**
- * Spreadsheet API
- */
-export const spreadsheetApi = {
-    /**
-     * Process spreadsheet
-     */
-    async process(filePath: string): Promise<any> {
-        return fetchJson(`${API_BASE}/spreadsheet/process`, {
-            method: 'POST',
-            body: JSON.stringify(filePath),
-        })
-    },
-
-    /**
-     * Upload spreadsheet
-     */
-    async upload(file: File): Promise<string> {
-        const formData = new FormData()
-        formData.append('file', file)
-
-        const response = await fetch(`${API_BASE}/spreadsheet/upload`, {
-            method: 'POST',
-            body: formData,
-        })
-
-        if (!response.ok) {
-            throw new ApiError(response.status, await response.text())
-        }
-
-        return response.text()
+    deleteAll(): Promise<void> {
+        return del("/database/delete_all")
     },
 }

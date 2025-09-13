@@ -1,6 +1,6 @@
 import { Inter } from 'next/font/google';
-import { SidebarProvider } from '@/components/ui/sidebar'; // Ensure this path is correct
-import { DataManagerSidebar } from '@/components/sidebar'; // Ensure this path is correct
+import { Header } from "@/components/new-header"
+import { MainContent } from "@/components/MainContent"
 import { Providers } from './providers';
 import './globals.css';
 
@@ -20,15 +20,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.className} bg-background text-foreground`} suppressHydrationWarning>
         <Providers>
-          <SidebarProvider>
-            <div className="flex h-screen w-full">
-              {/* Sidebar */}
-              <DataManagerSidebar className="w-64" />
-
-              {/* Main Content */}
-              <main className="flex-1 h-full overflow-hidden">{children}</main>
-            </div>
-          </SidebarProvider>
+          <div className="flex flex-col h-screen w-full">
+            <Header />
+            {/* Main Content controlled by header state */}
+            <main className="flex-1 overflow-hidden">
+              <MainContent />
+            </main>
+          </div>
         </Providers>
       </body>
     </html>

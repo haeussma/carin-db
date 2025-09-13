@@ -1,97 +1,90 @@
 "use client"
 
-import { memo, useState, useEffect } from "react"
+import { memo, useState } from "react"
 import { Handle, Position, type NodeProps } from "@xyflow/react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useSchemaStore } from "@/store/useSchemaStore"
-import type { NodeConfig } from "@/lib/types"
+import type { SheetNode, PropertyValue, RefProperty } from "@/lib/types"
 import { Star, Plus, MoreHorizontal, Trash2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-interface SheetCardNodeProps extends NodeProps {
+type SheetCardNodeProps = NodeProps & {
   data: {
     nodeName: string
-    nodeConfig: NodeConfig
+    sheetNode: SheetNode
     onPropertyEdit: (nodeId: string, propertyName: string) => void
     isConnecting: boolean
   }
 }
 
+const isRef = (p: PropertyValue): p is RefProperty => p.kind === "ref"
+
 export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
-  const { nodeName, nodeConfig, onPropertyEdit, isConnecting } = data
-  const { addProperty, removeProperty, updateProperty, setUniqueProperty, renameSheet, deleteSheet } = useSchemaStore()
+  const { sheetNode, onPropertyEdit, isConnecting } = data
+  const nodeName = sheetNode.name
+  const { addProperty, updateProperty, renameSheet, deleteSheet } = useSchemaStore()
+
   const [newPropName, setNewPropName] = useState("")
   const [editingName, setEditingName] = useState(false)
   const [tempName, setTempName] = useState(nodeName)
   const [editingProperty, setEditingProperty] = useState<string | null>(null)
   const [tempPropertyName, setTempPropertyName] = useState("")
 
+  // Note: No need to update node internals since handles are always rendered
+
+  // --- actions -------------------------------------------------------------
 
   const handleAddProperty = () => {
-    if (newPropName.trim()) {
-      const newProperty = { kind: "value" as const, name: newPropName.trim(), dtype: "str" as const, unique: false }
-      addProperty(nodeName, newProperty)
-      setNewPropName("")
-    }
+    const name = newPropName.trim()
+    if (!name) return
+    addProperty(nodeName, { kind: "value", name, dtype: "str", unique: false })
+    setNewPropName("")
   }
 
   const handleRename = () => {
-    if (tempName !== nodeName && tempName.trim()) {
-      renameSheet(nodeName, tempName.trim())
-    }
+    const name = tempName.trim()
+    if (name && name !== nodeName) renameSheet(nodeName, name)
     setEditingName(false)
   }
 
   const handleDelete = () => {
-    if (confirm(`Are you sure you want to delete the "${nodeName}" sheet? This cannot be undone.`)) {
+    if (confirm(`Delete sheet "${nodeName}"? This cannot be undone.`)) {
       deleteSheet(nodeName)
     }
   }
 
   const handleUniqueToggle = (propName: string) => {
-    const currentProperty = nodeConfig.properties[propName]
-    if (currentProperty) {
-      const updatedProperty = { ...currentProperty, unique: !currentProperty.unique }
-      updateProperty(nodeName, propName, updatedProperty)
-    }
+    const current = sheetNode.properties.find(p => p.name === propName)
+    if (!current) return
+    updateProperty(nodeName, propName, { ...current, unique: !current.unique })
   }
 
   const handlePropertyEdit = (propName: string) => {
     onPropertyEdit(nodeName, propName)
   }
 
-  const handlePropertyNameEdit = (propName: string) => {
+  const startRenameProperty = (propName: string) => {
     setEditingProperty(propName)
     setTempPropertyName(propName)
   }
 
-  const handlePropertyRename = (oldName: string) => {
+  const commitRenameProperty = (oldName: string) => {
     const newName = tempPropertyName.trim()
-
-    // If name is empty or unchanged, just cancel editing
     if (!newName || newName === oldName) {
       setEditingProperty(null)
       setTempPropertyName("")
       return
     }
-
-    // Get the current property configuration
-    const currentProperty = nodeConfig.properties[oldName]
-    if (currentProperty) {
-      // Create new property with updated name
-      const updatedProperty = { ...currentProperty, name: newName }
-
-      console.log('🏷️ Renaming property:', { oldName, newName, property: updatedProperty })
-
-      // Use updateProperty to rename (it handles the old->new mapping)
-      updateProperty(nodeName, oldName, updatedProperty)
-    }
-
+    const current = sheetNode.properties.find(p => p.name === oldName)
+    if (!current) return
+    updateProperty(nodeName, oldName, { ...current, name: newName })
     setEditingProperty(null)
     setTempPropertyName("")
   }
+
+  // --- render --------------------------------------------------------------
 
   return (
     <div className="relative w-80" data-connecting={isConnecting}>
@@ -127,14 +120,27 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-2 overflow-visible">
-          <div className="max-h-48 overflow-y-auto space-y-1 overflow-x-visible">
-            {Object.entries(nodeConfig.properties).map(([propName, prop], index) => {
-              const isRef = prop.kind === "ref"
+        <CardContent className="space-y-1 overflow-visible rounded-md p-0">
+          <div className="flex flex-col w-full overflow-y-auto overflow-x-visible rounded-md overflow-visible">
+            {sheetNode.properties.map((prop, index) => {
+              const propName = prop.name
+              const ref = isRef(prop)
 
               return (
-                <div key={propName} className="flex items-center gap-2 relative py-1" style={{ minHeight: '32px' }}>
-                  {/* Clickable star for unique toggle */}
+                <div
+                  key={`${propName}-${index}`}
+                  className="flex items-center gap-2 rounded-md overflow-visible p-2"
+                  style={{ minHeight: 32 }}
+                >
+                  {/* Always render target handle, but hide when not connecting */}
+                  <Handle
+                    type="target"
+                    position={Position.Left}
+                    id={`${nodeName}-${prop.name}-target`}
+                    className={cn("!size-4 !relative !transform-none", !isConnecting && '!opacity-0 !pointer-events-none')}
+                    style={{ backgroundColor: 'hsl(var(--accent))', border: '2px solid hsl(var(--accent-foreground))' }}
+                  />
+                  {/* Unique toggle */}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -142,21 +148,18 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
                     onClick={() => handleUniqueToggle(propName)}
                     title={prop.unique ? "Remove unique" : "Set as unique"}
                   >
-                    <Star
-                      className={`h-3 w-3 ${prop.unique ? 'text-amber-600 fill-amber-600' : 'text-muted-foreground'}`}
-                    />
+                    <Star className={`h-3 w-3 ${prop.unique ? "text-amber-600 fill-amber-600" : "text-muted-foreground"}`} />
                   </Button>
 
-                  {/* Property name - editable */}
+                  {/* Editable property name */}
                   {editingProperty === propName ? (
                     <Input
                       value={tempPropertyName}
                       onChange={(e) => setTempPropertyName(e.target.value)}
-                      onBlur={() => handlePropertyRename(propName)}
+                      onBlur={() => commitRenameProperty(propName)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handlePropertyRename(propName)
-                        } else if (e.key === "Escape") {
+                        if (e.key === "Enter") commitRenameProperty(propName)
+                        if (e.key === "Escape") {
                           setEditingProperty(null)
                           setTempPropertyName("")
                         }
@@ -167,22 +170,22 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
                   ) : (
                     <span
                       className="text-xs font-medium truncate flex-1 min-w-0 cursor-pointer hover:bg-muted px-1 rounded"
-                      onClick={() => handlePropertyNameEdit(propName)}
+                      onClick={() => startRenameProperty(propName)}
                     >
                       {propName}
                     </span>
                   )}
 
-                  {/* Data type or reference info */}
+                  {/* Type / ref info */}
                   <div className="flex items-center gap-1">
-                    {isRef ? (
+                    {ref ? (
                       <span className="text-xs text-muted-foreground">→ {prop.to}</span>
                     ) : (
                       <span className="text-xs text-muted-foreground">{prop.dtype}</span>
                     )}
                   </div>
 
-                  {/* Edit button */}
+                  {/* Open inspector */}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -192,12 +195,20 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
                   >
                     <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
                   </Button>
+                  <Handle
+                    type="source"
+                    position={Position.Right}
+                    id={`${nodeName}-${prop.name}-source`}
+                    className="!size-4 !relative !transform-none !z-[1001]"
+                    style={{ backgroundColor: 'hsl(var(--accent))', border: '2px solid hsl(var(--accent-foreground))' }}
+                  />
                 </div>
               )
             })}
           </div>
 
-          <div className="flex gap-2 pt-2 border-t">
+          {/* add property */}
+          <div className="flex gap-2 pt-4 border-t p-6">
             <Input
               placeholder="Property name"
               value={newPropName}
@@ -211,53 +222,6 @@ export const SheetCardNode = memo(({ data }: SheetCardNodeProps) => {
           </div>
         </CardContent>
       </Card>
-
-      {/* React Flow Handles - positioned outside card but aligned with property rows */}
-      {Object.entries(nodeConfig.properties).map(([propName, prop], index) => {
-        // Calculate position: CardHeader (60px) + CardContent padding (8px) + property rows
-        const topPosition = 68 + (index * 34) + 16 // 68px for header + padding, 34px per row, 16px to center
-
-        return (
-          <div key={`handles-${propName}`}>
-            {/* Target handle (left side) */}
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={`${propName}-target`}
-              style={{
-                position: 'absolute',
-                left: '-12px',
-                top: `${topPosition}px`,
-                width: '16px',
-                height: '16px',
-                backgroundColor: '#3b82f6',
-                border: '2px solid white',
-                borderRadius: '50%',
-                zIndex: 1001
-              }}
-            />
-
-            {/* Source handle (right side) */}
-            <Handle
-              type="source"
-              position={Position.Right}
-              id={`${propName}-source`}
-              style={{
-                position: 'absolute',
-                right: '-12px',
-                top: `${topPosition}px`,
-                width: '16px',
-                height: '16px',
-                backgroundColor: 'white',
-                border: '2px solid white',
-                borderRadius: '50%',
-                zIndex: 1001
-              }}
-            />
-          </div>
-        )
-      })}
-
     </div>
   )
 })

@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
-
 export default function HomePage() {
-    // Redirect to /home by default
-    redirect('/home')
+    // Content is now controlled by Header state in layout
+    // No redirects needed - MainContent handles everything
+    return null
 }

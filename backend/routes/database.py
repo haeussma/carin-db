@@ -4,8 +4,7 @@ from typing import Any
 from fastapi import APIRouter
 from loguru import logger
 
-from backend.models.graph_model import GraphModel
-from backend.services.database import Database
+from ..services.database import Database
 
 router = APIRouter(prefix="/database")
 
@@ -21,11 +20,6 @@ async def get_database_health(db: Database) -> dict[str, str]:
 @router.get("/status", tags=["Database"])
 async def get_database_status(db: Database) -> dict[str, int]:
     return db.node_count
-
-
-@router.get("/db_structure", tags=["Database"])
-async def get_database_structure(db: Database) -> GraphModel:
-    return db.get_db_structure
 
 
 @router.get("/node_properties", tags=["Database"])

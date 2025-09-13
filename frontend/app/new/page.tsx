@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Toaster } from "@/components/ui/toaster"
 import { ReactFlowGraphCanvas } from "@/components/canvas/ReactFlowGraphCanvas"
-import { JsonPanel } from "@/components/json/JsonPanel"
 import { NodeInspector } from "@/components/inspector/NodeInspector"
 import { EdgeInspector } from "@/components/inspector/EdgeInspector"
 import { useSchemaStore } from "@/store/useSchemaStore"

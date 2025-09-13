@@ -3,6 +3,8 @@ from typing import List
 
 import pandas as pd
 
+from backend.new_model import ScalarType
+
 
 @dataclass
 class TypeInconsistency:
@@ -83,22 +85,38 @@ class DataSanityChecker:
 
         return True
 
-    def get_column_type(self, column: str) -> str:
+    def get_column_type(self, column: str) -> ScalarType:
         """
         Gets the primary type for a column after checking consistency.
         For numeric columns (int/float), always returns 'float'.
-        For other columns, returns the first non-numeric type found or falls back to 'str'.
+        For datetime columns, returns 'timestamp'.
+        For other columns, returns the first non-numeric, non-timestamp type found or falls back to 'str'.
         """
         non_empty_values = self.df[column][pd.notna(self.df[column])]
-        data_types = set(non_empty_values.apply(lambda x: type(x).__name__).unique())
-        numeric_types = {"int", "float"}
 
-        # If we have any numeric types, treat as float
-        if any(t in numeric_types for t in data_types):
-            return "float"
+        # Map Python types to ScalarType
+        def infer_scalar_type(x: object) -> ScalarType:
+            if isinstance(x, (int, float)):
+                return ScalarType.FLOAT
+            if isinstance(x, bool):
+                return ScalarType.BOOL
+            if hasattr(x, "tzinfo") or hasattr(x, "isoformat"):
+                return ScalarType.TIMESTAMP
+            return ScalarType.STR
 
-        # Otherwise return first type found or fallback to str
-        return next(iter(data_types)) if data_types else "str"
+        inferred_types = set(non_empty_values.apply(infer_scalar_type).unique())
+
+        # Priority: FLOAT > TIMESTAMP > BOOL > STR
+        if ScalarType.FLOAT in inferred_types:
+            return ScalarType.FLOAT
+        if ScalarType.TIMESTAMP in inferred_types:
+            return ScalarType.TIMESTAMP
+        if ScalarType.BOOL in inferred_types:
+            return ScalarType.BOOL
+        if ScalarType.STR in inferred_types:
+            return ScalarType.STR
+        # Fallback
+        return ScalarType.STR
 
     def eliminate_space_in_column_names(self):
         """Replace all spaces in column names with underscores"""

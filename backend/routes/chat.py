@@ -10,9 +10,7 @@ from neo4j.exceptions import CypherSyntaxError
 from pydantic import BaseModel
 from pyenzyme import EnzymeMLDocument, Protein, SmallMolecule
 
-from backend.services.database import _get_db as get_db
-
-from ...llm.agents import (
+from ..llm.agents import (
     ExistingMappingChoice,
     cypher_fixer_agent,
     data_extraction_agent,
@@ -25,12 +23,13 @@ from ...llm.agents import (
     small_molecule_agent,
     species_distinguisher_agent,
 )
-from ...llm.models import (
+from ..llm.models import (
     EnzymeMLMappings,
     MappingReport,
     SpeciesTraversal,
     SpeciesTraversalReport,
 )
+from ..services.database import _get_db as get_db
 
 router = APIRouter(prefix="/chat")
 

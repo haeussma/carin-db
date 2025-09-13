@@ -1,63 +1,48 @@
+# exceptions.py
+from dataclasses import asdict, dataclass
 from typing import List
 
-from pydantic import BaseModel
 
-
-class TypeInconsistencyLocation(BaseModel):
+@dataclass
+class SheetNameError:
     sheet_name: str
-    column: str
-    data_types: List[str]
-    rows: List[int]
     path: str
 
 
-class TypeInconsistencyError(Exception):
-    def __init__(self, inconsistencies: List[TypeInconsistencyLocation]):
-        self.inconsistencies = inconsistencies
+@dataclass
+class ColumnNameError:
+    sheet_name: str
+    column: str
+    path: str
 
-    def to_dict(self):
+
+@dataclass
+class ColumnTypeInconsistency:
+    sheet_name: str
+    column: str
+    first_inconsistency: int  # 0-based row index
+    path: str
+
+
+class SpreadsheetValidationError(Exception):
+    def __init__(
+        self,
+        sheet_name_errors: List[SheetNameError],
+        column_name_errors: List[ColumnNameError],
+        column_type_inconsistencies: List[ColumnTypeInconsistency],
+    ):
+        self.sheet_name_errors = sheet_name_errors
+        self.column_name_errors = column_name_errors
+        self.column_type_inconsistencies = column_type_inconsistencies
+        super().__init__("Spreadsheet validation failed")
+
+    def to_dict(self) -> dict:
         return {
-            "error": "type_inconsistency",
-            "message": "Found type inconsistencies in the data",
-            "details": [inc.model_dump() for inc in self.inconsistencies],
+            "error": "spreadsheet_validation",
+            "message": str(self),
+            "sheet_name_errors": [asdict(e) for e in self.sheet_name_errors],
+            "column_name_errors": [asdict(e) for e in self.column_name_errors],
+            "column_type_inconsistencies": [
+                asdict(e) for e in self.column_type_inconsistencies
+            ],
         }
-
-
-class PrimaryKeyError(Exception):
-    def __init__(self, key: str, sheet: str, rows: List[int], path: str):
-        self.key = key
-        self.sheet = sheet
-        self.rows = rows
-        self.path = path
-
-    def to_dict(self):
-        return {
-            "error": "primary_key_error",
-            "message": f"Primary key '{self.key}' error in sheet '{self.sheet}'",
-            "details": {
-                "key": self.key,
-                "sheet": self.sheet,
-                "rows": self.rows,
-                "path": self.path,
-            },
-        }
-
-
-class PrimaryKeyNotFoundInRowError(PrimaryKeyError):
-    def to_dict(self):
-        base = super().to_dict()
-        base["error"] = "primary_key_not_found"
-        base["message"] = (
-            f"Primary key '{self.key}' not found in rows {self.rows} of sheet '{self.sheet}'"
-        )
-        return base
-
-
-class PrimaryKeyNotUniqueError(PrimaryKeyError):
-    def to_dict(self):
-        base = super().to_dict()
-        base["error"] = "primary_key_not_unique"
-        base["message"] = (
-            f"Primary key '{self.key}' has duplicate values in rows {self.rows} of sheet '{self.sheet}'"
-        )
-        return base

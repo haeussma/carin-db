@@ -9,7 +9,6 @@ import {
     Controls,
     Background,
     ConnectionMode,
-    useReactFlow,
     type Node,
     type Edge,
     type Connection,
@@ -18,8 +17,11 @@ import '@xyflow/react/dist/style.css'
 import { useSchemaStore } from '@/store/useSchemaStore'
 import { SheetCardNode } from '@/components/nodes/SheetCardNode'
 import { PropertyInspector } from '@/components/inspector/PropertyInspector'
+import { SpreadsheetErrorDialog } from '@/components/spreadsheet-error-dialog'
 import { Button } from '@/components/ui/button'
 import { Plus, Upload, Save } from 'lucide-react'
+import { ApiError } from '@/lib/api'
+import { EdgeInspector } from '@/components/inspector/EdgeInspector'
 
 const nodeTypes = {
     sheetNode: SheetCardNode as any,
@@ -27,34 +29,43 @@ const nodeTypes = {
 
 // Component that uses useReactFlow hook inside ReactFlow context
 function ReactFlowControls({ nodes, isMounted }: { nodes: Node[], isMounted: boolean }) {
-    const { fitView } = useReactFlow()
-
-    // Auto-fit view when nodes change - ensures all content is always reachable
-    React.useEffect(() => {
-        if (nodes.length > 0 && isMounted) {
-            // Small delay to ensure React Flow is ready
-            const timer = setTimeout(() => {
-                fitView({
-                    padding: 0.2,  // 20% padding for breathing room
-                    includeHiddenNodes: false
-                })
-            }, 100)
-            return () => clearTimeout(timer)
-        }
-    }, [nodes, isMounted, fitView])
-
     return null
 }
 
 export function ReactFlowGraphCanvas() {
-    const { getCurrentModel, selectNode, selectEdge, clearSelection, createOrUpdateRef, updateSheetPosition, addSheet, removeProperty, replaceSheetConnection } = useSchemaStore()
+    const {
+        getCurrentProject,
+        selectNode, selectEdge, clearSelection,
+        createOrUpdateRef, updateSheetPosition, addSheet, addProperty, removeProperty, replaceSheetConnection,
+        saveToBackend, importSchema,
+        isLoading, isSyncing,
+        currentProjectName,
+        projects,
+    } = useSchemaStore()
     const [propertyInspectorOpen, setPropertyInspectorOpen] = React.useState(false)
     const [selectedProperty, setSelectedProperty] = React.useState<{ nodeId: string, propertyName: string } | null>(null)
     const [isConnecting, setIsConnecting] = React.useState(false)
     const [isMounted, setIsMounted] = useState(false)
+    const [spreadsheetError, setSpreadsheetError] = React.useState<any>(null)
+    const [errorDialogOpen, setErrorDialogOpen] = React.useState(false)
+    const [showEdgeInspector, setShowEdgeInspector] = useState(false)
+    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const connectionStartRef = React.useRef<{ nodeId: string, handleId: string, position: { x: number, y: number } } | null>(null)
-    const model = getCurrentModel()
+    const project = getCurrentProject()
+    const model = project?.model
 
+    // Debug logging
+    useEffect(() => {
+        console.log('🎨 Canvas state updated:', {
+            currentProjectName,
+            projectsCount: projects.length,
+            projectNames: projects.map(p => p.name),
+            model: !!model
+        })
+        if (model) {
+            console.log('📊 Model sheets:', model.sheets.length, model.sheets.map(s => s.name))
+        }
+    }, [model, currentProjectName, projects])
 
     // Prevent hydration mismatches by only rendering after mount
     useEffect(() => {
@@ -78,6 +89,15 @@ export function ReactFlowGraphCanvas() {
             return []
         }
 
+        // Debug: Check for duplicate sheet names
+        const sheetNames = model.sheets.map(s => s.name)
+        const duplicates = sheetNames.filter((name, index) => sheetNames.indexOf(name) !== index)
+        if (duplicates.length > 0) {
+            console.error('🚨 Duplicate sheet names detected:', duplicates)
+            console.error('📊 All sheet names:', sheetNames)
+            console.error('📊 Model:', model)
+        }
+
         const nodes = model.sheets.map((sheet, index) => {
             // Use stored position or calculate deterministic fallback
             const defaultPosition = {
@@ -91,14 +111,7 @@ export function ReactFlowGraphCanvas() {
                 position: sheet.position || defaultPosition,
                 data: {
                     nodeName: sheet.name,
-                    nodeConfig: {
-                        sheet: sheet.name,
-                        unique_property: sheet.unique_property,
-                        properties: sheet.properties.reduce((acc, prop) => {
-                            acc[prop.name] = prop
-                            return acc
-                        }, {} as Record<string, any>),
-                    },
+                    sheetNode: sheet,
                     onPropertyEdit: handlePropertyEdit,
                     isConnecting: isConnecting,
                 },
@@ -117,17 +130,33 @@ export function ReactFlowGraphCanvas() {
 
         const edges: Edge[] = []
 
+        console.log('🔍 Edge creation debug - Model sheets:', model.sheets.length)
         model.sheets.forEach((sheet) => {
+            console.log(`📊 Sheet "${sheet.name}" has ${sheet.properties.length} properties:`)
             sheet.properties.forEach((prop, propIndex) => {
+                console.log(`  - Property "${prop.name}": kind="${prop.kind}"`, prop.kind === 'ref' ? `-> ${prop.to}.${prop.on}` : '')
                 if (prop.kind === 'ref') {
                     // Create unique edge ID using sheet name, property name, and target
-                    const edgeId = `${sheet.name}.${prop.name}.${prop.to}.${propIndex}`
+                    const sourceHandleId = `${sheet.name}-${prop.name}-source`
+                    const targetHandleId = `${prop.to}-${prop.on}-target`
+                    const edgeId = `${sheet.name}.${prop.name}.${prop.to}.${prop.on}`
+
+                    console.log('🚀 Creating edge:', {
+                        sheetName: sheet.name,
+                        propName: prop.name,
+                        targetSheet: prop.to,
+                        targetProp: prop.on,
+                        sourceHandleId,
+                        targetHandleId,
+                        edgeId
+                    })
                     edges.push({
                         id: edgeId,
                         source: sheet.name,
                         target: prop.to,
-                        sourceHandle: `${prop.name}-source`,
-                        targetHandle: `${prop.on}-target`,
+                        type: 'smoothstep',
+                        sourceHandle: `${sheet.name}-${prop.name}-source`,
+                        targetHandle: `${prop.to}-${prop.on}-target`,
                         animated: true,
                         style: {
                             stroke: 'hsl(var(--primary))',
@@ -146,6 +175,17 @@ export function ReactFlowGraphCanvas() {
                 }
             })
         })
+
+        console.log(`🎯 Total edges created: ${edges.length}`)
+        if (edges.length > 0) {
+            console.log('📋 Edge details:', edges.map(e => ({
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                sourceHandle: e.sourceHandle,
+                targetHandle: e.targetHandle
+            })))
+        }
 
         return edges
     }, [model])
@@ -172,8 +212,8 @@ export function ReactFlowGraphCanvas() {
             }
 
             // Extract property names from handle IDs
-            const sourceProp = params.sourceHandle.replace('-source', '')
-            const targetProp = params.targetHandle.replace('-target', '')
+            const sourceProp = params.sourceHandle.replace(`${params.source}-`, '').replace('-source', '')
+            const targetProp = params.targetHandle.replace(`${params.target}-`, '').replace('-target', '')
 
             console.log('📝 Extracted properties:', { sourceProp, targetProp, from: `${params.source}.${sourceProp}`, to: `${params.target}.${targetProp}` })
 
@@ -184,22 +224,22 @@ export function ReactFlowGraphCanvas() {
                 if (sourceSheet) {
                     console.log('✅ Source sheet found:', sourceSheet.name, 'properties count:', sourceSheet.properties.length)
 
-                    // Check if there are existing ref properties that connect to the same target sheet
+                    // Check if there are existing ref properties from the SAME source property to the target sheet
                     const existingRefs = sourceSheet.properties.filter(prop =>
-                        prop.kind === 'ref' && prop.to === params.target
+                        prop.kind === 'ref' && prop.to === params.target && prop.name === sourceProp
                     )
 
-                    console.log('🔍 Found existing refs to target:', existingRefs.length, existingRefs.map(r => r.name))
+                    console.log('🔍 Found existing refs from same source property to target:', existingRefs.length, existingRefs.map(r => r.name))
 
                     if (existingRefs.length > 0) {
-                        console.log(`🔄 Replacing ${existingRefs.length} existing connection(s) between ${params.source} -> ${params.target}`)
+                        console.log(`🔄 Replacing existing connection from ${params.source}.${sourceProp} -> ${params.target}`)
 
                         // Use atomic replace function instead of remove + create
                         console.log('🔄 Calling replaceSheetConnection:', params.source, sourceProp, params.target, targetProp)
                         replaceSheetConnection(params.source, sourceProp, params.target, targetProp)
                     } else {
-                        // No existing connections, just create new one
-                        console.log(`✨ Creating new connection between ${params.source} -> ${params.target}`)
+                        // No existing connections from this source property, just create new one
+                        console.log(`✨ Creating new connection between ${params.source}.${sourceProp} -> ${params.target}.${targetProp}`)
                         console.log('🔄 Calling createOrUpdateRef:', params.source, sourceProp, params.target, targetProp)
                         createOrUpdateRef(params.source, sourceProp, params.target, targetProp)
                     }
@@ -216,12 +256,6 @@ export function ReactFlowGraphCanvas() {
 
             // Don't manually add edge - let the model regeneration handle it
             // The edge will be automatically created when the model updates
-
-            // Automatically open PropertyInspector for the newly created reference
-            setTimeout(() => {
-                setSelectedProperty({ nodeId: params.source, propertyName: sourceProp })
-                setPropertyInspectorOpen(true)
-            }, 100) // Small delay to ensure the property is created in the store
         },
         [createOrUpdateRef, removeProperty, replaceSheetConnection, model]
     )
@@ -235,6 +269,9 @@ export function ReactFlowGraphCanvas() {
 
     const onEdgeClick = useCallback(
         (event: React.MouseEvent, edge: Edge) => {
+            console.log('🔗 Edge clicked:', edge.id, edge.data)
+            setSelectedEdgeId(edge.id)
+            setShowEdgeInspector(true)
             selectEdge(edge.id)
         },
         [selectEdge]
@@ -330,12 +367,6 @@ export function ReactFlowGraphCanvas() {
                     // Create the reference with custom edge name "HAS_{source_property_label}"
                     // This will connect to the new sheet's 'id' property
                     createOrUpdateRef(sourceNodeId, sourcePropName, newSheetName, 'id', `HAS_${sourcePropName.toUpperCase()}`)
-
-                    // Automatically open PropertyInspector for the newly created reference
-                    setTimeout(() => {
-                        setSelectedProperty({ nodeId: sourceNodeId, propertyName: sourcePropName })
-                        setPropertyInspectorOpen(true)
-                    }, 100)
                 } else {
                     console.error('❌ Could not find .react-flow or .react-flow__viewport element')
                 }
@@ -369,26 +400,57 @@ export function ReactFlowGraphCanvas() {
     }, [addSheet])
 
     const handleUploadExcel = useCallback(() => {
-        // Create file input element
         const input = document.createElement('input')
         input.type = 'file'
-        input.accept = '.xlsx,.xls'
-        input.onchange = (e) => {
+        input.accept = '.xlsx'
+        input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0]
-            if (file) {
+            if (!file) return
+            const inputElement = e.target as HTMLInputElement
+            try {
                 console.log('📊 Excel file selected:', file.name)
-                // TODO: Implement Excel parsing and sheet/node creation
-                // This would parse the Excel file and create nodes for each sheet
+
+                // Import the schema into the current project
+                console.log('🔍 Importing into current project:', currentProjectName)
+                await importSchema(file, currentProjectName!)
+                console.log(`✅ Imported schema into project: ${currentProjectName}`)
+
+            } catch (err) {
+                console.error('❌ Import failed:', err)
+
+                // Handle 422 validation errors with detailed dialog
+                if (err instanceof ApiError && err.status === 422) {
+                    try {
+                        const errorDetails = JSON.parse(err.message)
+                        // Backend returns {detail: {error: "spreadsheet_validation", ...}}
+                        // Extract the actual error object from detail
+                        const validationError = errorDetails.detail || errorDetails
+                        setSpreadsheetError(validationError)
+                        setErrorDialogOpen(true)
+                    } catch {
+                        // Fallback if error message isn't valid JSON
+                        alert('Spreadsheet validation failed. Please check your file format.')
+                    }
+                } else {
+                    // Handle other errors with simple alert
+                    alert(err instanceof Error ? err.message : 'Import failed')
+                }
+            } finally {
+                inputElement.value = ''
             }
         }
         input.click()
-    }, [])
+    }, [importSchema])
 
-    const handleSaveSchema = useCallback(() => {
-        console.log('💾 Saving schema to backend...')
-        // TODO: Implement schema sync to backend
-        // This would send the current schema state to the backend
-    }, [])
+    const handleSaveSchema = useCallback(async () => {
+        try {
+            console.log('💾 Saving schema to backend...')
+            await saveToBackend() // uses currentProjectId internally
+        } catch (err) {
+            console.error('❌ Save failed:', err)
+            alert(err instanceof Error ? err.message : 'Save failed')
+        }
+    }, [saveToBackend])
 
     // Only show loading if we truly don't have a model or aren't mounted
     // Add a small delay to prevent flickering during state updates
@@ -408,8 +470,8 @@ export function ReactFlowGraphCanvas() {
         return (
             <div className="w-full h-full flex items-center justify-center bg-background">
                 <div className="text-center">
-                    <p className="text-muted-foreground mb-4">{!model ? "No project selected" : "Loading..."}</p>
-                    <p className="text-sm text-muted-foreground/70">{!model ? "Create or select a project to get started" : "Initializing canvas..."}</p>
+                    <p className="text-muted-foreground mb-4">Loading...</p>
+                    <p className="text-sm text-muted-foreground/70">Initializing canvas...</p>
                 </div>
             </div>
         )
@@ -421,23 +483,19 @@ export function ReactFlowGraphCanvas() {
         >
             {/* Custom styles for React Flow handles */}
             <style jsx global>{`
-                .react-flow__handle {
-                    z-index: 1000 !important;
-                    pointer-events: all !important;
-                }
-                .react-flow__handle-top,
-                .react-flow__handle-bottom,
-                .react-flow__handle-left,
-                .react-flow__handle-right {
-                    z-index: 1000 !important;
-                }
-            `}</style>
+                    .react - flow__handle {
+                        z- index: 1000!important;
+                pointer - events: all!important;
+            }
+                .react - flow__handle - top,
+                .react - flow__handle - bottom,
+                .react - flow__handle - left,
+                .react - flow__handle - right {
+        z - index: 1000!important;
+    }
+    `}</style>
 
             {/* Action Buttons - Top Left */}
-            {/* 
-                Align the first button (Add) to the left, and the other two (Upload, Save) to the right.
-                We use two absolutely positioned containers: one left, one right, both top-aligned.
-            */}
             <div>
                 {/* Left-aligned Add button */}
                 <div className="absolute top-4 left-4 z-50 flex">
@@ -454,14 +512,17 @@ export function ReactFlowGraphCanvas() {
                 <div className="absolute top-4 right-4 z-50 flex gap-2">
                     <Button
                         onClick={handleUploadExcel}
+                        disabled={isLoading || isSyncing}
                         className="h-12 w-12 rounded-full bg-secondary hover:bg-secondary/90 shadow-lg"
                         title="Upload Excel file"
                         size="sm"
                     >
                         <Upload className="h-5 w-5" />
                     </Button>
+
                     <Button
                         onClick={handleSaveSchema}
+                        disabled={isSyncing}
                         className="h-12 w-12 rounded-full bg-green-600 hover:bg-green-700 shadow-lg"
                         title="Save schema to backend"
                         size="sm"
@@ -501,7 +562,7 @@ export function ReactFlowGraphCanvas() {
                 translateExtent={[[-5000, -5000], [5000, 5000]]}  // Large panning area
                 minZoom={0.1}
                 maxZoom={2}
-                attributionPosition="bottom-left"
+                attributionPosition="bottom-right"
                 className="bg-background w-full h-full"
                 style={{ width: '100%', height: '100%' }}
             >
@@ -514,7 +575,8 @@ export function ReactFlowGraphCanvas() {
                     maskColor="hsl(var(--background) / 0.8)"
                     style={{ width: 120, height: 80 }}
                 />
-                <ReactFlowControls nodes={nodes} isMounted={isMounted} />
+                {/* Remove this line: */}
+                {/* <ReactFlowControls nodes={nodes} isMounted={isMounted} /> */}
             </ReactFlow>
 
             {/* Property Inspector Overlay */}
@@ -532,6 +594,25 @@ export function ReactFlowGraphCanvas() {
                         />
                     </div>
                 </>
+            )}
+
+            {/* Spreadsheet Error Dialog */}
+            <SpreadsheetErrorDialog
+                error={spreadsheetError}
+                open={errorDialogOpen}
+                onOpenChange={setErrorDialogOpen}
+            />
+
+            {/* Edge Inspector */}
+            {selectedEdgeId && (
+                <EdgeInspector
+                    edgeId={selectedEdgeId}
+                    open={showEdgeInspector}
+                    onOpenChange={(open) => {
+                        setShowEdgeInspector(open)
+                        if (!open) setSelectedEdgeId(null)
+                    }}
+                />
             )}
         </div>
     )

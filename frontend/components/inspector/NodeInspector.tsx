@@ -39,8 +39,9 @@ function PropertyEditor({
   onRename: (newName: string) => void
   onUpdate: (newProperty: PropertyValue) => void
 }) {
-  const { getCurrentModel } = useSchemaStore()
-  const model = getCurrentModel()
+  const { getCurrentProject } = useSchemaStore()
+  const project = getCurrentProject()
+  const model = project?.model
   const [propertyName, setPropertyName] = useState(propName)
   const [nameError, setNameError] = useState("")
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -374,11 +375,12 @@ function PropertyEditor({
 }
 
 export function NodeInspector({ nodeId, onClose }: NodeInspectorProps) {
-  const { getCurrentModel, renameSheet, addProperty, removeProperty, updateProperty, setUniqueProperty, deleteSheet } =
+  const { getCurrentProject, renameSheet, addProperty, removeProperty, updateProperty, setUniqueProperty, deleteSheet } =
     useSchemaStore()
   const [newPropName, setNewPropName] = useState("")
 
-  const model = getCurrentModel()
+  const project = getCurrentProject()
+  const model = project?.model
   if (!model) return <div>No project selected</div>
 
   const node = model.sheets.find((n) => n.name === nodeId)

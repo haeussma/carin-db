@@ -32,18 +32,17 @@ export function EdgeInspector({ edgeId, open, onOpenChange }: EdgeInspectorProps
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
 
   const project = getCurrentProject()
-  const model = project.model
 
   // Parse edge ID to get source and target info
   const [sourceSheet, sourceProp, targetSheet, targetProp] = edgeId.split('.')
 
   // Find the actual edge property in the model
-  const sourceSheetNode = model.sheets.find(s => s.name === sourceSheet)
-  const targetSheetNode = model.sheets.find(s => s.name === targetSheet)
+  const sourceSheetNode = project.sheets.find(s => s.name === sourceSheet)
+  const targetSheetNode = project.sheets.find(s => s.name === targetSheet)
   const edgeProperty = sourceSheetNode?.properties.find(p => p.name === sourceProp && p.kind === 'ref') as RefProperty | undefined
 
   // Get available nodes and properties
-  const availableNodes = model.sheets.map(s => s.name)
+  const availableNodes = project.sheets.map(s => s.name)
   const sourceProperties = sourceSheetNode?.properties.map(p => p.name) || []
   const targetProperties = targetSheetNode?.properties.map(p => p.name) || []
 

@@ -38,12 +38,7 @@ export interface SheetNode {
 
 export interface GraphSheetModel {
   project_name: string
-  created_at: string
   sheets: SheetNode[]
-}
-
-export interface Project {
-  name: string
-  model: GraphSheetModel
+  created_at: string
   last_modified: string
 }

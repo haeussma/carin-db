@@ -24,7 +24,10 @@ export function ProjectSelector() {
 
   // Load project list (and first project) on mount
   React.useEffect(() => {
-    void loadFromBackend()
+    loadFromBackend().catch((error) => {
+      console.error("Failed to load projects:", error)
+      // Error is already handled by the store's setError function
+    })
   }, [loadFromBackend])
 
   const handleCreateProject = async () => {
@@ -48,6 +51,16 @@ export function ProjectSelector() {
 
   const disabled = isLoading || projects.length === 0
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🔍 ProjectSelector projects:', {
+      projectsCount: projects.length,
+      projectNames: projects.map(p => p.project_name),
+      currentProjectName,
+      isLoading
+    })
+  }, [projects, currentProjectName, isLoading])
+
   return (
     <div className="flex items-center gap-2">
       <FolderOpen className="h-4 w-4 text-muted-foreground" />
@@ -65,8 +78,8 @@ export function ProjectSelector() {
             <div className="px-2 py-1.5 text-sm text-muted-foreground">No projects found</div>
           ) : (
             projects.map((project) => (
-              <SelectItem key={project.name} value={project.name}>
-                {project.name}
+              <SelectItem key={project.project_name} value={project.project_name}>
+                {project.project_name}
               </SelectItem>
             ))
           )}

@@ -52,20 +52,19 @@ export function ReactFlowGraphCanvas() {
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const connectionStartRef = React.useRef<{ nodeId: string, handleId: string, position: { x: number, y: number } } | null>(null)
     const project = getCurrentProject()
-    const model = project?.model
 
     // Debug logging
     useEffect(() => {
         console.log('🎨 Canvas state updated:', {
             currentProjectName,
             projectsCount: projects.length,
-            projectNames: projects.map(p => p.name),
-            model: !!model
+            projectNames: projects.map(p => p.project_name),
+            model: !!project
         })
-        if (model) {
-            console.log('📊 Model sheets:', model.sheets.length, model.sheets.map(s => s.name))
+        if (project) {
+            console.log('📊 Model sheets:', project.sheets.length, project.sheets.map(s => s.name))
         }
-    }, [model, currentProjectName, projects])
+    }, [project, currentProjectName, projects])
 
     // Prevent hydration mismatches by only rendering after mount
     useEffect(() => {
@@ -85,20 +84,20 @@ export function ReactFlowGraphCanvas() {
 
     // Convert our model to React Flow nodes
     const initialNodes: Node[] = useMemo(() => {
-        if (!model) {
+        if (!project) {
             return []
         }
 
         // Debug: Check for duplicate sheet names
-        const sheetNames = model.sheets.map(s => s.name)
+        const sheetNames = project.sheets.map(s => s.name)
         const duplicates = sheetNames.filter((name, index) => sheetNames.indexOf(name) !== index)
         if (duplicates.length > 0) {
             console.error('🚨 Duplicate sheet names detected:', duplicates)
             console.error('📊 All sheet names:', sheetNames)
-            console.error('📊 Model:', model)
+            console.error('📊 Model:', project)
         }
 
-        const nodes = model.sheets.map((sheet, index) => {
+        const nodes = project.sheets.map((sheet, index) => {
             // Use stored position or calculate deterministic fallback
             const defaultPosition = {
                 x: 50 + (index % 3) * 350,
@@ -121,17 +120,17 @@ export function ReactFlowGraphCanvas() {
         })
 
         return nodes
-    }, [model, handlePropertyEdit, isConnecting])
+    }, [project, handlePropertyEdit, isConnecting])
 
 
     // Convert our model to React Flow edges
     const initialEdges: Edge[] = useMemo(() => {
-        if (!model) return []
+        if (!project) return []
 
         const edges: Edge[] = []
 
-        console.log('🔍 Edge creation debug - Model sheets:', model.sheets.length)
-        model.sheets.forEach((sheet) => {
+        console.log('🔍 Edge creation debug - Model sheets:', project.sheets.length)
+        project.sheets.forEach((sheet) => {
             console.log(`📊 Sheet "${sheet.name}" has ${sheet.properties.length} properties:`)
             sheet.properties.forEach((prop, propIndex) => {
                 console.log(`  - Property "${prop.name}": kind="${prop.kind}"`, prop.kind === 'ref' ? `-> ${prop.to}.${prop.on}` : '')
@@ -188,7 +187,7 @@ export function ReactFlowGraphCanvas() {
         }
 
         return edges
-    }, [model])
+    }, [project])
 
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
@@ -218,9 +217,9 @@ export function ReactFlowGraphCanvas() {
             console.log('📝 Extracted properties:', { sourceProp, targetProp, from: `${params.source}.${sourceProp}`, to: `${params.target}.${targetProp}` })
 
             // Remove existing connections between the same two sheets and create new one atomically
-            if (model) {
+            if (project) {
                 console.log('📊 Model found, checking for source sheet:', params.source)
-                const sourceSheet = model.sheets.find(s => s.name === params.source)
+                const sourceSheet = project.sheets.find(s => s.name === params.source)
                 if (sourceSheet) {
                     console.log('✅ Source sheet found:', sourceSheet.name, 'properties count:', sourceSheet.properties.length)
 
@@ -257,7 +256,7 @@ export function ReactFlowGraphCanvas() {
             // Don't manually add edge - let the model regeneration handle it
             // The edge will be automatically created when the model updates
         },
-        [createOrUpdateRef, removeProperty, replaceSheetConnection, model]
+        [createOrUpdateRef, removeProperty, replaceSheetConnection, project]
     )
 
     const onNodeClick = useCallback(
@@ -457,14 +456,14 @@ export function ReactFlowGraphCanvas() {
     const [showLoading, setShowLoading] = useState(true)
 
     useEffect(() => {
-        if (model && isMounted) {
+        if (project && isMounted) {
             // Small delay to prevent flickering during rapid state updates
             const timer = setTimeout(() => setShowLoading(false), 100)
             return () => clearTimeout(timer)
         } else {
             setShowLoading(true)
         }
-    }, [model, isMounted])
+    }, [project, isMounted])
 
     if (showLoading) {
         return (

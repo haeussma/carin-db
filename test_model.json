@@ -1,0 +1,742 @@
+{
+    "project_name": "gen-1",
+    "sheets": [
+        {
+            "name": "Reaction",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "well_id",
+                    "dtype": "str",
+                    "unique": true
+                },
+                {
+                    "kind": "ref",
+                    "name": "SUBSTRATE",
+                    "to": "Molecule",
+                    "on": "name",
+                    "edge": "HAS_SUBSTRATE",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "PRODUCT",
+                    "to": "Molecule",
+                    "on": "name",
+                    "edge": "HAS_PRODUCT",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "temperature",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "temperature_Unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "temperature_constant",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "pH",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "pH_constant",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "pH_detected_when",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "pH_detected_how",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "SOLVENT",
+                    "to": "Molecule",
+                    "on": "name",
+                    "edge": "HAS_SOLVENT",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "cosolvent",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Reaction_Solution",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "reaction_volume",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "reaction_volume_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "SAMPLING",
+                    "to": "Sampling",
+                    "on": "id",
+                    "edge": "HAS_SAMPLING",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": -319.32412987925306,
+                "y": 452.16402591377835
+            }
+        },
+        {
+            "name": "Molecule",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "cas_id",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "name",
+                    "dtype": "str",
+                    "unique": true
+                },
+                {
+                    "kind": "value",
+                    "name": "concentration",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "concentration_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "supplier",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "purity_percentual",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "formulation",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_temperature",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_temperature_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_start",
+                    "dtype": "timestamp",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_additives",
+                    "dtype": "str",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": 401.64765992266393,
+                "y": 1041.4922276635525
+            }
+        },
+        {
+            "name": "Biocatalyst",
+            "properties": [
+                {
+                    "kind": "ref",
+                    "name": "well_id",
+                    "to": "Reaction",
+                    "on": "well_id",
+                    "edge": "REACTION_CATALYST",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "catalyst_self_produced",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "ENZYME",
+                    "to": "Enzyme",
+                    "on": "id",
+                    "edge": "DESCRIBES",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Production_organism",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "production_strain",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "induction_molecule",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "induction_molecule_concentration",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "induction_molecule_concentration_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Visible_Band_Gel_Induction",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "sequence_confirmationof_onnone_isolated_clone",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "cell_disruption_process",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Formulation",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "was_immobilized",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Visible_Band_Gel_protein",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Concentration",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Concentration_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "concentration_determination_method",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_medium",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_temperature",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_temperature_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_start",
+                    "dtype": "timestamp",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "storage_additives",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Volume_in_reaction",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "volume_unit",
+                    "dtype": "str",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": -879.5703455713445,
+                "y": -258.00155466764613
+            }
+        },
+        {
+            "name": "Enzyme",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "id",
+                    "dtype": "str",
+                    "unique": true
+                },
+                {
+                    "kind": "value",
+                    "name": "database_name",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "sequence",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "source_organism",
+                    "dtype": "float",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": -140.9132616800355,
+                "y": -62.78402048662756
+            }
+        },
+        {
+            "name": "Sampling",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "id",
+                    "dtype": "str",
+                    "unique": true
+                },
+                {
+                    "kind": "value",
+                    "name": "sampling_volume",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "sampling_volume_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "mixing_during_sampling",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "vessel_opened",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Time",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "time_unit",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "special_treatment",
+                    "dtype": "str",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": 511.9342467108106,
+                "y": 401.9102843187978
+            }
+        },
+        {
+            "name": "Peak",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "FALSE",
+                    "dtype": "int",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "well_id",
+                    "to": "Reaction",
+                    "on": "well_id",
+                    "edge": "MEASURED",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Injection_Name",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Comment",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Inject_time",
+                    "dtype": "timestamp",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Type",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "ProcessingMethod",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Retention_Time",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Area",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Amount",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "traces",
+                    "dtype": "bool",
+                    "unique": false
+                },
+                {
+                    "kind": "ref",
+                    "name": "detected_molecule",
+                    "to": "Molecule",
+                    "on": "name",
+                    "edge": "HAS_DETECTED_MOLECULE",
+                    "multi": {
+                        "sep": ",",
+                        "trim": true,
+                        "allow_empty": false
+                    },
+                    "case": "insensitive",
+                    "on_miss": "error",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": -830.4670454545455,
+                "y": 854.3
+            }
+        },
+        {
+            "name": "ActiveSite",
+            "properties": [
+                {
+                    "kind": "value",
+                    "name": "ENZYME",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "ASMC_group",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P1",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P2",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P3",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P4",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P5",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P6",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P7",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P8",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P9",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P10",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P11",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P12",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P13",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P14",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P15",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P16",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P17",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P18",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P19",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P20",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "P21",
+                    "dtype": "str",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Sequence_plasmid",
+                    "dtype": "float",
+                    "unique": false
+                },
+                {
+                    "kind": "value",
+                    "name": "Plasmid_specification",
+                    "dtype": "float",
+                    "unique": false
+                }
+            ],
+            "position": {
+                "x": 351.2722022429191,
+                "y": -627.2613450672918
+            }
+        }
+    ],
+    "created_at": "2025-09-15T18:46:02.667530Z",
+    "last_modified": "2025-09-16T12:25:53.416000Z"
+}

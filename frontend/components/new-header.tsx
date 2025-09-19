@@ -46,7 +46,7 @@ export function Header() {
     }, [isLoading, projects.length, isCreateDialogOpen])
 
     const currentProject = currentProjectName
-        ? projects.find(p => p.name === currentProjectName)
+        ? projects.find(p => p.project_name === currentProjectName)
         : null
 
     const handleCreateProject = async () => {
@@ -85,7 +85,7 @@ export function Header() {
                     <DropdownMenuTrigger asChild>
                         <Button variant="outline" className="justify-between min-w-[160px] bg-transparent">
                             <span className="truncate">
-                                {currentProject?.name || (isLoading ? "Loading..." : "Select Project")}
+                                {currentProjectName || (isLoading ? "Loading..." : "Select Project")}
                             </span>
                             <ChevronDown className="h-4 w-4 ml-2 flex-shrink-0" />
                         </Button>
@@ -93,11 +93,11 @@ export function Header() {
                     <DropdownMenuContent align="start" className="w-[200px]">
                         {projects.map((project) => (
                             <DropdownMenuItem
-                                key={project.name}
-                                onClick={() => selectProject(project.name)}
+                                key={project.project_name}
+                                onClick={() => selectProject(project.project_name)}
                                 className="flex items-center justify-between"
                             >
-                                <span className="truncate">{project.name}</span>
+                                <span className="truncate">{project.project_name}</span>
                                 {projects.length > 1 && (
                                     <Button
                                         variant="ghost"
@@ -105,7 +105,7 @@ export function Header() {
                                         className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            handleDeleteProject(project.name)
+                                            handleDeleteProject(project.project_name)
                                         }}
                                     >
                                         <Trash2 className="h-3 w-3" />

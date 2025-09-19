@@ -1,11 +1,11 @@
 import { create } from "zustand"
-import type { GraphSheetModel, SheetNode, PropertyValue, Project } from "@/lib/types"
+import type { GraphSheetModel, SheetNode, PropertyValue } from "@/lib/types"
 import { validateModel, computeProgress } from "@/lib/validation"
 import { ApiError, projectsApi } from "@/lib/api"
 
 interface SchemaState {
   // Project management
-  projects: Project[]
+  projects: GraphSheetModel[]
   currentProjectName: string
   isLoading: boolean
   isSyncing: boolean,
@@ -58,12 +58,13 @@ interface SchemaState {
   importSchema: (file: File, projectName?: string) => Promise<void>
 
   // Getters
-  getCurrentProject: () => Project  // Always returns a project
+  getCurrentProject: () => GraphSheetModel  // Always returns a project
 }
 
 const createInitialModel = (projectName: string): GraphSheetModel => ({
   project_name: projectName,
   created_at: new Date().toISOString(),
+  last_modified: new Date().toISOString(),
   sheets: [
     {
       name: "Measurement",
@@ -86,9 +87,9 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     console.error(fallback, err)
   }
 
-  const getCurrentProject = (): Project => {
+  const getCurrentProject = (): GraphSheetModel => {
     const { projects, currentProjectName } = get()
-    const project = projects.find(p => p.name === currentProjectName)
+    const project = projects.find(p => p.project_name === currentProjectName)
     if (!project) {
       throw new Error(`Current project '${currentProjectName}' not found in projects list`)
     }
@@ -101,17 +102,17 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     return sheet.properties.filter(prop => prop.unique).map(prop => prop.name)
   }
 
-  const touch = (p: Project) => ({ ...p, last_modified: new Date().toISOString() })
+  const touch = (p: GraphSheetModel) => ({ ...p, last_modified: new Date().toISOString() })
 
   /** mutate current project immutably, recompute issues, and save */
-  const updateCurrent = (mutator: (p: Project) => Project) => {
+  const updateCurrent = (mutator: (p: GraphSheetModel) => GraphSheetModel) => {
     const current = getCurrentProject() // Always exists now
     set(s => ({
-      projects: s.projects.map(p => (p.name === current.name ? touch(mutator(p)) : p)),
+      projects: s.projects.map(p => (p.project_name === current.project_name ? touch(mutator(p)) : p)),
     }))
     get().recomputeIssues()
     // best effort save (no await here so UI stays snappy)
-    void get().saveToBackend(current.name)
+    void get().saveToBackend(current.project_name)
   }
 
   // ---- store ---------------------------------------------------------------
@@ -141,25 +142,21 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
         // Ensure unique project name
         let projectName = baseName
         let counter = 1
-        while (projects.some(p => p.name === projectName)) {
+        while (projects.some(p => p.project_name === projectName)) {
           projectName = `${baseName}_${counter}`
           counter++
         }
 
-        const project: Project = {
-          name: projectName,
-          model: createInitialModel(projectName),
-          last_modified: new Date().toISOString(),
-        }
+        const project: GraphSheetModel = createInitialModel(projectName)
 
         set(s => ({
           projects: [...s.projects, project],
-          currentProjectName: project.name,
+          currentProjectName: project.project_name,
         }))
         get().recomputeIssues()
 
         await projectsApi.save(project)
-        return project.name
+        return project.project_name
       } catch (e) {
         setError(e, "Failed to create project")
         return ""
@@ -167,24 +164,24 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     },
 
     deleteProject: async (projectName) => {
-      const proj = get().projects.find(p => p.name === projectName)
+      const proj = get().projects.find(p => p.project_name === projectName)
       if (!proj) {
-        set(s => ({ projects: s.projects.filter(p => p.name !== projectName) }))
+        set(s => ({ projects: s.projects.filter(p => p.project_name !== projectName) }))
         return
       }
       try {
-        await projectsApi.remove(proj.name)
+        await projectsApi.remove(proj.project_name)
       } catch (e) {
         // keep going even if backend delete fails
         console.warn("Backend delete failed:", e)
       }
       set(s => {
-        const remaining = s.projects.filter(p => p.name !== projectName)
+        const remaining = s.projects.filter(p => p.project_name !== projectName)
         // Always ensure a project is selected
         let newCurrentProjectName: string
         if (s.currentProjectName === projectName) {
           if (remaining.length > 0) {
-            newCurrentProjectName = remaining[0].name
+            newCurrentProjectName = remaining[0].project_name
           } else {
             // If no projects remain, reload from backend to get/create default
             void get().loadFromBackend()
@@ -207,20 +204,19 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     },
 
     renameProject: async (projectName, newName) => {
-      const proj = get().projects.find(p => p.name === projectName)
+      const proj = get().projects.find(p => p.project_name === projectName)
       if (!proj) return
-      const oldName = proj.name
-      const updated: Project = {
+      const oldName = proj.project_name
+      const updated: GraphSheetModel = {
         ...proj,
-        name: newName,
-        model: { ...proj.model, project_name: newName },
+        project_name: newName,
         last_modified: new Date().toISOString(),
       }
 
       // optimistic local update
       set(s => ({
-        projects: s.projects.map(p => (p.name === projectName ? updated : p)),
-        currentProjectName: s.currentProjectName === projectName ? updated.name : s.currentProjectName,
+        projects: s.projects.map(p => (p.project_name === projectName ? updated : p)),
+        currentProjectName: s.currentProjectName === projectName ? updated.project_name : s.currentProjectName,
       }))
       get().recomputeIssues()
 
@@ -254,23 +250,13 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
         const { currentProjectName } = get()
 
         if (projects.length === 0) {
-          // No projects exist - create a default project and save it
-          const defaultProject: Project = {
-            name: "My Project",
-            model: createInitialModel("My Project"),
-            last_modified: new Date().toISOString(),
-          }
-
-          // Save the default project to backend
-          await projectsApi.save(defaultProject)
-
-          set({ projects: [defaultProject], currentProjectName: defaultProject.name });
-          console.log("✅ Created and saved default project:", defaultProject.name)
+          // No projects exist - raise error
+          throw new Error("No projects found in backend. Please create a project first.")
         } else {
           // Projects exist - ensure one is always selected
           let selectedProject: string
 
-          if (projects.find(p => p.name === currentProjectName)) {
+          if (projects.find(p => p.project_name === currentProjectName)) {
             // Current selection is still valid
             selectedProject = currentProjectName
           } else {
@@ -278,7 +264,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
             const mostRecent = projects.reduce((a, b) =>
               new Date(a.last_modified) > new Date(b.last_modified) ? a : b
             );
-            selectedProject = mostRecent.name
+            selectedProject = mostRecent.project_name
           }
 
           set({ projects, currentProjectName: selectedProject });
@@ -289,14 +275,8 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
         console.error("😡 Failed to load projects from backend", e)
         setError(e, "Failed to load from backend")
 
-        // Fallback: create a local default project if backend fails
-        const fallbackProject: Project = {
-          name: "Local Project",
-          model: createInitialModel("Local Project"),
-          last_modified: new Date().toISOString(),
-        }
-        set({ projects: [fallbackProject], currentProjectName: fallbackProject.name });
-        console.log("⚠️ Created fallback project due to backend error")
+        // No fallback - let the error propagate
+        console.log("⚠️ Backend error - no fallback project created")
       } finally {
         set({ isLoading: false })
         console.log("😎 Loaded projects from backend")
@@ -307,7 +287,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
       set({ isSyncing: true, lastSyncError: null })
       try {
         const project = projectName
-          ? get().projects.find(p => p.name === projectName)
+          ? get().projects.find(p => p.project_name === projectName)
           : getCurrentProject() // Always exists now
 
         if (!project) {
@@ -315,12 +295,12 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
           return
         }
 
-        const toSave: Project = { ...project, last_modified: new Date().toISOString() }
+        const toSave: GraphSheetModel = { ...project, last_modified: new Date().toISOString() }
         await projectsApi.save(toSave)
 
         // Update the project in the store with the new timestamp
         set(s => ({
-          projects: s.projects.map(p => (p.name === project.name ? toSave : p)),
+          projects: s.projects.map(p => (p.project_name === project.project_name ? toSave : p)),
         }))
       } catch (e) {
         setError(e, "Failed to save to backend")
@@ -334,7 +314,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
 
     addSheet: (name, position) => {
       const current = getCurrentProject() // Always exists now
-      const existing = new Set(current.model.sheets.map(s => s.name))
+      const existing = new Set(current.sheets.map(s => s.name))
       let sheetName = name
       if (!sheetName) {
         let i = 1
@@ -355,22 +335,19 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
         properties: [{ kind: "value", name: "id", dtype: "str", unique: true }],
         position,
       }
-      updateCurrent(p => ({ ...p, model: { ...p.model, sheets: [...p.model.sheets, newSheet] } }))
+      updateCurrent(p => ({ ...p, sheets: [...p.sheets, newSheet] }))
       return uniqueName
     },
 
     deleteSheet: (name) => {
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets
-            .filter(s => s.name !== name)
-            .map(s => ({
-              ...s,
-              properties: s.properties.filter(prop => prop.kind !== "ref" || prop.to !== name),
-            })),
-        },
+        sheets: p.sheets
+          .filter(s => s.name !== name)
+          .map(s => ({
+            ...s,
+            properties: s.properties.filter(prop => prop.kind !== "ref" || prop.to !== name),
+          })),
       }))
       set(s => ({ selected: s.selected.id === name ? { type: null } : s.selected }))
     },
@@ -378,16 +355,13 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     renameSheet: (oldName, newName) => {
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(sheet => ({
-            ...sheet,
-            name: sheet.name === oldName ? newName : sheet.name,
-            properties: sheet.properties.map(prop =>
-              prop.kind === "ref" && prop.to === oldName ? { ...prop, to: newName } : prop
-            ),
-          })),
-        },
+        sheets: p.sheets.map(sheet => ({
+          ...sheet,
+          name: sheet.name === oldName ? newName : sheet.name,
+          properties: sheet.properties.map(prop =>
+            prop.kind === "ref" && prop.to === oldName ? { ...prop, to: newName } : prop
+          ),
+        })),
       }))
       set(s => ({ selected: s.selected.id === oldName ? { ...s.selected, id: newName } : s.selected }))
     },
@@ -396,10 +370,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     updateSheetPosition: (sheetName, position) => {
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(s => (s.name === sheetName ? { ...s, position } : s)),
-        },
+        sheets: p.sheets.map(s => (s.name === sheetName ? { ...s, position } : s)),
       }))
     },
 
@@ -407,7 +378,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
 
     addProperty: (sheetName, property) => {
       const current = getCurrentProject() // Always exists now
-      const sheet = current.model.sheets.find(s => s.name === sheetName)
+      const sheet = current.sheets.find(s => s.name === sheetName)
       if (!sheet) return
 
       // Check for duplicate property names
@@ -419,58 +390,49 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
 
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(s => (s.name === sheetName ? { ...s, properties: [...s.properties, property] } : s)),
-        },
+        sheets: p.sheets.map(s => (s.name === sheetName ? { ...s, properties: [...s.properties, property] } : s)),
       }))
     },
 
     updateProperty: (sheetName, oldName, property) => {
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(sheet => {
-            if (sheet.name === sheetName) {
-              return {
-                ...sheet,
-                properties: sheet.properties.map(prop => (prop.name === oldName ? property : prop)),
-              }
-            }
+        sheets: p.sheets.map(sheet => {
+          if (sheet.name === sheetName) {
             return {
               ...sheet,
-              properties: sheet.properties.map(prop =>
-                prop.kind === "ref" && prop.to === sheetName && prop.on === oldName
-                  ? { ...prop, on: property.name }
-                  : prop
-              ),
+              properties: sheet.properties.map(prop => (prop.name === oldName ? property : prop)),
             }
-          }),
-        },
+          }
+          return {
+            ...sheet,
+            properties: sheet.properties.map(prop =>
+              prop.kind === "ref" && prop.to === sheetName && prop.on === oldName
+                ? { ...prop, on: property.name }
+                : prop
+            ),
+          }
+        }),
       }))
     },
 
     removeProperty: (sheetName, propName) => {
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(sheet =>
-            sheet.name === sheetName
-              ? {
-                ...sheet,
-                properties: sheet.properties.filter(prop => prop.name !== propName),
-              }
-              : sheet
-          ),
-        },
+        sheets: p.sheets.map(sheet =>
+          sheet.name === sheetName
+            ? {
+              ...sheet,
+              properties: sheet.properties.filter(prop => prop.name !== propName),
+            }
+            : sheet
+        ),
       }))
     },
 
     // -------- Graph actions --------
     createOrUpdateRef: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
-      const model = getCurrentProject().model // Always exists now
+      const model = getCurrentProject() // Always exists now
       const target = model.sheets.find(s => s.name === targetSheet)
       if (!target) return
       const uniqueProps = getUniqueProperties(target)
@@ -489,10 +451,16 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
         unique: false,
       }
       get().updateProperty(sourceSheet, sourceProp, ref)
+
+      // Automatically set target property as unique
+      const targetProperty = target.properties.find(p => p.name === on)
+      if (targetProperty && targetProperty.kind === 'value') {
+        get().updateProperty(targetSheet, on, { ...targetProperty, unique: true })
+      }
     },
 
     replaceSheetConnection: (sourceSheet, sourceProp, targetSheet, targetProp, customEdgeName) => {
-      const model = getCurrentProject().model // Always exists now
+      const model = getCurrentProject() // Always exists now
       const target = model.sheets.find(s => s.name === targetSheet)
       if (!target) return
       const uniqueProps = getUniqueProperties(target)
@@ -512,21 +480,24 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
       }
       updateCurrent(p => ({
         ...p,
-        model: {
-          ...p.model,
-          sheets: p.model.sheets.map(sheet =>
-            sheet.name === sourceSheet
-              ? {
-                ...sheet,
-                properties: [
-                  ...sheet.properties.filter(prop => !(prop.kind === "ref" && prop.to === targetSheet && prop.name === sourceProp)),
-                  ref,
-                ],
-              }
-              : sheet
-          ),
-        },
+        sheets: p.sheets.map(sheet =>
+          sheet.name === sourceSheet
+            ? {
+              ...sheet,
+              properties: [
+                ...sheet.properties.filter(prop => !(prop.kind === "ref" && prop.to === targetSheet && prop.name === sourceProp)),
+                ref,
+              ],
+            }
+            : sheet
+        ),
       }))
+
+      // Automatically set target property as unique
+      const targetProperty = target.properties.find(p => p.name === on)
+      if (targetProperty && targetProperty.kind === 'value') {
+        get().updateProperty(targetSheet, on, { ...targetProperty, unique: true })
+      }
     },
 
     selectNode: (nodeId, propertyName) => set({ selected: { type: "node", id: nodeId, propertyName } }),
@@ -535,7 +506,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
 
     updateEdge: (edgeId, patch) => {
       const [sourceSheet, sourceProp] = edgeId.split(".")
-      const model = getCurrentProject().model // Always exists now
+      const model = getCurrentProject() // Always exists now
       const source = model.sheets.find(s => s.name === sourceSheet)
       const curr = source?.properties.find(p => p.name === sourceProp)
       if (curr && curr.kind === "ref") {
@@ -551,7 +522,7 @@ export const useSchemaStore = create<SchemaState>()((set, get) => {
     // -------- Validation / Import / Export --------
 
     recomputeIssues: () => {
-      const model = getCurrentProject().model // Always exists now
+      const model = getCurrentProject() // Always exists now
       const issues = validateModel(model)
       const progress = computeProgress(model, issues)
       set({ issues, progress })

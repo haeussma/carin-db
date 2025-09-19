@@ -1,4 +1,4 @@
-import type { Project } from "./types"
+import type { GraphSheetModel } from "./types"
 
 const API_BASE = "/api"
 
@@ -55,22 +55,22 @@ const enc = encodeURIComponent
 const projPath = (name: string) => `/projects/${enc(name)}`
 
 export const projectsApi = {
-    /** GET /projects/load -> Project[] */
-    loadAll(): Promise<Project[]> {
+    /** GET /projects/load -> GraphSheetModel[] */
+    loadAll(): Promise<GraphSheetModel[]> {
         console.log('🔍 API: Loading all projects')
-        return get<Project[]>("/projects/load")
+        return get<GraphSheetModel[]>("/projects/load")
     },
 
-    /** GET /projects/{project_name} -> Project */
-    getOne(projectName: string): Promise<Project> {
-        return get<Project>(projPath(projectName))
+    /** GET /projects/{project_name} -> GraphSheetModel */
+    getOne(projectName: string): Promise<GraphSheetModel> {
+        return get<GraphSheetModel>(projPath(projectName))
     },
 
-    /** POST /projects/{project_name} (body: Project) -> void */
-    save(project: Project): Promise<void> {
-        console.log('🔍 API: Saving project:', project.name, project)
+    /** POST /projects/{project_name} (body: GraphSheetModel) -> void */
+    save(project: GraphSheetModel): Promise<void> {
+        console.log('🔍 API: Saving project:', project.project_name, project)
         // Backend returns None (204), so we don't expect a response
-        return postJson<void>(projPath(project.name), project)
+        return postJson<void>(projPath(project.project_name), project)
     },
 
     /** DELETE /projects/{project_name} -> 204 No Content */

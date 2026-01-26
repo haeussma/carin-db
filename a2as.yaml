@@ -1,0 +1,348 @@
+manifest:
+  version: "0.1.2"
+  schema: https://a2as.org/cert/schema
+  subject:
+    name: haeussma/carin-db
+    source: https://github.com/haeussma/carin-db
+    branch: main
+    commit: "175c8836"
+    scope: [backend/api/routes/database.py, backend/api/routes/llm.py, backend/llm/agents.py, backend/llm/models.py, backend/llm/orchestrator.py,
+      backend/llm/tools.py]
+  issued:
+    by: A2AS.org
+    at: '2026-01-26T16:15:33Z'
+  signatures:
+    digest: sha256:adEO3G4KtcKM02dkaXRBOvJAymDA0iHPKD54q6BP20c
+    key: ed25519:6xzPsyl2AJSGKfbAH_dJLmuS16O4cygwB2lyPWIJSLo
+    sig: ed25519:IHXVYJzJi_Zlf5EVTmXkNBE1mgTbFLj3MVbJRLttsxlqC-IBgnz1wahNQhnLOTl0KSj8mqwGnaBcLAoeFhf3Cg
+
+agents:
+  biochemistry_semantics_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    params:
+      name: biochemistry_semantics_agent
+      instructions: [You are a specialized agent for finding semantic matches between different biochemical terms ., Other
+          agents may approach you if uncertain wheter a term in its instructions matches another term., E.g. if an name of
+          a protein is equivalent to the database name of a protein. (obviously not). But e.g. a `enzyme` is equivalent to
+          a `protein`., or a small molecule to a chemical substance or compound., Keep your answer short and concise.]
+  cypher_translator_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [get_graph_schema]
+    params:
+      name: cypher_translator_agent
+      instructions: ['You are a specialized agent for translating natural language queries into Cypher queries. You can only
+          use nodes and relationships that are allowed by the graph schema. Otherwise the query will fail.You need to call
+          the `get_graph_schema` tool first to get the graph schema on which you can base query design.When writing the MATCH
+          clause, use the full node names from the graph schema. E.g. instead of MATCH (e:ExampleNode) use MATCH (ExampleNode:ExampleNode).
+          return only the Cypher query, do not include any other text.']
+  data_analysis_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [cypher_translator_agent, execute_query]
+    params:
+      name: data_analysis_agent
+      instructions: [You are a specialized agent for biochemical data analysis., 'You always need follow the following steps:',
+        1. Rephrase the question into a Cypher query. Consult the `Cypher_Translator_Agent`., 2. Execute the query and get
+          the data by calling the `execute_query` tool to get the data., 3. Create a report based on the data., a. Summerize
+          the data in a concise way., b. Answer specific questions about the data asked by the user., 'Note:', '- The report
+          needs to fully be founded on the data. Do not come up with analysis and conclusion if they are not backed by the
+          data.', '- Don''t make up data. If you don''t have the data, say so.']
+  mapping_evaluation_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [biochemistry_semantics_agent, get_graph_schema]
+    params:
+      name: mapping_evaluation_agent
+      output_type: EvaluationReport
+      instructions: [You are a specialized agent for evaluating the reports of the individual agents., Your job is to decide
+          if the mapping are reasonable., You can change the reports if neccessary in accordance with the biochemistry_semantics_agent.,
+        You can also get the graph schema to understand the graph using the `get_graph_schema` tool., You need to evaluate
+          the mapping and return your final report.]
+  measurement_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [get_graph_schema]
+    params:
+      name: measurement_agent
+      output_type: MappingReport
+      instructions: [You are a specialized agent for finding finding the correct mappings for a Measurement object., The object
+          contains a nested object of MeasurementData. Don't consider it. That's the job of another agent., 'Here is the description
+          of the Measurement object:', '```', '{Measurement.model_json_schema}', '```', 'If you cannot find a match for the
+          `id` field, you can use the content that fits the `name` field. And vice versa.']
+  measurement_data_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [get_graph_schema]
+    params:
+      name: measurement_data_agent
+      output_type: MappingReport
+      instructions: [You are a specialized agent for finding the correct mappings for a MeasurementData object., 'Here is
+          the description of the MeasurementData object:', '```', '{MeasurementData.model_json_schema}', '```']
+  protein_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [get_graph_schema]
+    params:
+      name: protein_agent
+      output_type: MappingReport
+      instructions: [You are a specialized agent for finding semantic matches between the description of an enzyme and the
+          nodes and relationships in a Neo4j database that should be mapped to an Enzyme object., Your job is to check if
+          in the Graph all mandatory information infomation is present to map to an instance of Enzyme., 'Here is the description
+          of the Enzyme object:', '```', '{Protein.model_json_schema}', '```', 'If you cannot find a match for the `id` field,
+          you can use the content that fits the `name` field for the `id` field.', So this isnt't a show stopper.]
+  question_dispatcher_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    params:
+      name: question_dispatcher_agent
+      handoffs: [cypher_translator_agent, data_analysis_agent]
+      instructions: [You are a specialized agent that dispatches tasks to the appropriate agents, based on the user's question.,
+        'There following agents are available:', '- Cypher_Translator_Agent', '- Call this agent if the user does not specifically
+          ask to analyze data.', '- Call this agent for phrases similar or equivalent to:', '- Give me the data for ...',
+        '- I need ...', '- Is there data for ...', '- Data_Analysis_Agent', '- Call this agent if the user asks to analyze
+          data.', '- Call this agent for phrases similar or equivalent to:', '- Analyze the data for ...', '- Look into my
+          data ...', '- Is there a connection between ...', '- Do you spot ...', '- Give me a summary of ...']
+  small_molecule_agent:
+    type: instance
+    models: [gpt-4.1-2025-04-14]
+    tools: [get_graph_schema, execute_query]
+    params:
+      name: small_molecule_agent
+      output_type: MappingReport
+      instructions: [You are a specialized agent for mapping database information to SmallMolecule objects., 'Here is the
+          description of the SmallMolecule object:', '```', '{SmallMolecule.model_json_schema}', '```', You need to call the
+          `get_graph_schema` tool to get the graph schema, and then use the `execute_query` tool to get the data you need
+          to map., You can only use information that is present in the database results., 'For the ID field, you can use an
+          abbreviation of the molecule name (e.g., ''glc'' for ''glucose'').', 'Never fill out the fields `@id`, `@type`,
+          or `@context`.', 'If multiple molecules are asked for, you need to return a list of SmallMolecule objects. Adjust
+          the cypher query accordingly.']
+
+models:
+  gpt-4.1-2025-04-14:
+    type: literal
+    agents: [biochemistry_semantics_agent, small_molecule_agent, protein_agent, measurement_agent, measurement_data_agent,
+      mapping_evaluation_agent, cypher_translator_agent, data_analysis_agent, question_dispatcher_agent]
+
+tools:
+  biochemistry_semantics_agent:
+    type: agent
+    agents: [mapping_evaluation_agent]
+    params:
+      alias: biochemistry_semantics_agent.as_tool
+      tool_description: A tool to clarify ambiguous mappings.
+  cypher_translator_agent:
+    type: agent
+    agents: [data_analysis_agent]
+    params:
+      alias: cypher_translator_agent.as_tool
+      tool_description: A tool for translating natural language queries into Cypher queries.
+  execute_query:
+    type: decorator
+    agents: [small_molecule_agent, data_analysis_agent]
+    params:
+      description: |-
+        Execute a Cypher query and return the results.
+        You can only use cypher queries that are allowed by the graph schema.
+  get_graph_schema:
+    type: decorator
+    agents: [small_molecule_agent, protein_agent, measurement_agent, measurement_data_agent, mapping_evaluation_agent, cypher_translator_agent]
+    params:
+      description: Get the graph schema with information about labels, rel-types, property keys.
+
+teams:
+  question_dispatcher_agent:
+    type: handoff
+    agents: [question_dispatcher_agent, cypher_translator_agent, data_analysis_agent]
+
+imports:
+  Agent: agents.Agent
+  AgentOrchestrator: backend.llm.orchestrator.AgentOrchestrator
+  Annotated: typing.Annotated
+  Any: typing.Any
+  APIRouter: fastapi.APIRouter
+  asynccontextmanager: contextlib.asynccontextmanager
+  Attribute: backend.models.graph_model.Attribute
+  AuthError: neo4j.exceptions.AuthError
+  BaseModel: pydantic.BaseModel
+  BaseSettings: pydantic_settings.BaseSettings
+  Body: fastapi.Body
+  ClientError: neo4j.exceptions.ClientError
+  config: api.routes.config
+  CORSMiddleware: fastapi.middleware.cors.CORSMiddleware
+  data_analysis_agent: backend.llm.agents.data_analysis_agent
+  database: api.routes.database
+  dataclass: dataclasses.dataclass
+  DB: backend.services.database.DB
+  defaultdict: collections.defaultdict
+  Depends: fastapi.Depends
+  Enum: enum.Enum
+  EvaluationReport: backend.llm.models.EvaluationReport
+  execute_query: tools.execute_query
+  FastAPI: fastapi.FastAPI
+  Field: pydantic.Field
+  field: dataclasses.field
+  field_validator: pydantic.field_validator
+  function_tool: agents.function_tool
+  get_db: services.database.get_db
+  get_graph_schema: tools.get_graph_schema
+  GraphDatabase: neo4j.GraphDatabase
+  GraphModel: backend.models.graph_model.GraphModel
+  json: json
+  List: typing.List
+  Literal: typing.Literal
+  llm: api.routes.llm
+  logger: loguru.logger
+  mapping_evaluation_agent: backend.llm.agents.mapping_evaluation_agent
+  MappingReport: models.MappingReport
+  Measurement: pyenzyme.Measurement
+  measurement_agent: backend.llm.agents.measurement_agent
+  measurement_data_agent: backend.llm.agents.measurement_data_agent
+  MeasurementData: pyenzyme.MeasurementData
+  Node: backend.models.graph_model.Node
+  Optional: typing.Optional
+  os: os
+  Protein: pyenzyme.Protein
+  protein_agent: backend.llm.agents.protein_agent
+  question_dispatcher_agent: backend.llm.agents.question_dispatcher_agent
+  Relationship: backend.models.graph_model.Relationship
+  Runner: agents.Runner
+  ServiceUnavailable: neo4j.exceptions.ServiceUnavailable
+  SettingsConfigDict: pydantic_settings.SettingsConfigDict
+  small_molecule_agent: backend.llm.agents.small_molecule_agent
+  SmallMolecule: pyenzyme.SmallMolecule
+  spreadsheet: api.routes.spreadsheet
+  threading: threading
+  TypedDict: typing.TypedDict
+  Union: typing.Union
+  uuid: uuid
+  uvicorn: uvicorn
+  WebSocket: fastapi.WebSocket
+
+functions:
+  __init__:
+    type: sync
+    module: backend.llm.orchestrator
+    args: [self]
+  _connect:
+    type: sync
+    module: backend.services.database
+    args: [self]
+  _validate_connection:
+    type: sync
+    module: backend.services.database
+    args: [self]
+  ask:
+    type: async
+    module: backend.api.routes.llm
+    args: [question, db, run_count]
+    params:
+      returns: dict
+  close:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: None
+  delete_all:
+    type: async
+    module: backend.api.routes.database
+    args: [db]
+    params:
+      returns: dict
+  evaluate:
+    type: async
+    module: backend.llm.orchestrator
+    args: [self, user_input]
+    params:
+      returns: EvaluationReport
+  execute_query:
+    type: sync
+    module: backend.services.database
+    args: [self, query]
+  get_database_health:
+    type: async
+    module: backend.api.routes.database
+    args: [db]
+    params:
+      returns: dict
+  get_database_status:
+    type: async
+    module: backend.api.routes.database
+    args: [db]
+    params:
+      returns: dict
+  get_database_structure:
+    type: async
+    module: backend.api.routes.database
+    args: [db]
+    params:
+      returns: GraphModel
+  get_db:
+    type: sync
+    module: backend.services.database
+    params:
+      returns: Database
+  get_db_structure:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: GraphModel
+  get_graph_info_dict:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: dict
+  get_graph_schema:
+    type: tool
+    module: backend.llm.tools
+  get_node_properties:
+    type: async
+    module: backend.api.routes.database
+    args: [db]
+    params:
+      returns: Any
+  health_check:
+    type: async
+    module: backend.main
+  lifespan:
+    type: async
+    module: backend.main
+    args: [app]
+  llm_chat:
+    type: async
+    module: backend.main
+    args: [websocket]
+  node_count:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: dict
+  node_properties:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: List[Node]
+  relationship_properties:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: list[dict]
+  relationships:
+    type: sync
+    module: backend.services.database
+    args: [self]
+    params:
+      returns: list[Relationship]
+  truncate_example:
+    type: sync
+    module: backend.models.graph_model
+    args: [cls, v]
+    params:
+      returns: Union
